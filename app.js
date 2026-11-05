@@ -1,5 +1,5 @@
 // ==========================================
-// APP.JS - LÓGICA PRINCIPAL Y RECONSTRUCCIÓN ROBUSTA
+// TRIPMAST3R PRO - LÓGICA PRINCIPAL Y MODALES
 // ==========================================
 
 let tripsData = [];
@@ -7,9 +7,9 @@ let paymentMethods = [];
 let packingList = [];
 
 try {
-  tripsData = JSON.parse(localStorage.getItem('tripmaster_trips')) || [];
-  paymentMethods = JSON.parse(localStorage.getItem('tripmaster_payments')) || [];
-  packingList = JSON.parse(localStorage.getItem('tripmaster_packing')) || [];
+  tripsData = JSON.parse(localStorage.getItem('tripmast3r_pro_trips')) || [];
+  paymentMethods = JSON.parse(localStorage.getItem('tripmast3r_pro_payments')) || [];
+  packingList = JSON.parse(localStorage.getItem('tripmast3r_pro_packing')) || [];
 } catch (e) {
   tripsData = [];
   paymentMethods = [];
@@ -20,7 +20,6 @@ let activeTripId = null;
 let activeItemId = null;
 let tripTimeFilter = 'all';
 
-// Garantizar que la app inicie solo cuando el DOM esté 100% renderizado
 window.addEventListener('load', () => {
   renderTripsList();
   if (typeof populateYearSelects === 'function') populateYearSelects();
@@ -30,9 +29,9 @@ window.addEventListener('load', () => {
 });
 
 function saveToLocalStorage() {
-  localStorage.setItem('tripmaster_trips', JSON.stringify(tripsData));
-  localStorage.setItem('tripmaster_payments', JSON.stringify(paymentMethods));
-  localStorage.setItem('tripmaster_packing', JSON.stringify(packingList));
+  localStorage.setItem('tripmast3r_pro_trips', JSON.stringify(tripsData));
+  localStorage.setItem('tripmast3r_pro_payments', JSON.stringify(paymentMethods));
+  localStorage.setItem('tripmast3r_pro_packing', JSON.stringify(packingList));
   if (typeof populateYearSelects === 'function') populateYearSelects();
 }
 
@@ -135,7 +134,7 @@ function renderTripsList() {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:0.85rem;">No se encontraron viajes. Toca + abajo para crear uno nuevo.</div>';
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:0.85rem;">No se encontraron viajes en TripMast3r Pro. Toca + para crear uno nuevo.</div>';
     return;
   }
 
@@ -195,7 +194,7 @@ function renderTimeline(trip) {
   container.innerHTML = '';
 
   if (!trip.items || trip.items.length === 0) {
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:0.85rem;">Sin actividades registradas. Toca + para agregar reservas.</div>';
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:0.85rem;">Sin actividades registradas. Toca + para agregar eventos.</div>';
     return;
   }
 
@@ -302,6 +301,201 @@ function handleFabClick() {
   } else {
     openModalNewTrip();
   }
+}
+
+// ==========================================
+// FORMULARIOS DE ITEMS
+// ==========================================
+
+function openFlightForm() {
+  closeModals();
+  const modal = document.getElementById('modal-flight-form');
+  if (modal) modal.classList.add('active');
+}
+
+function openHotelForm() {
+  closeModals();
+  const modal = document.getElementById('modal-hotel-form');
+  if (modal) modal.classList.add('active');
+}
+
+function openCarForm() {
+  closeModals();
+  const modal = document.getElementById('modal-car-form');
+  if (modal) modal.classList.add('active');
+}
+
+function openRestaurantForm() {
+  closeModals();
+  const modal = document.getElementById('modal-restaurant-form');
+  if (modal) modal.classList.add('active');
+}
+
+function openGenericForm(type, titleText) {
+  closeModals();
+  const typeInput = document.getElementById('generic-item-type');
+  const titleInput = document.getElementById('generic-form-title');
+  if (typeInput) typeInput.value = type;
+  if (titleInput) titleInput.textContent = titleText;
+  const modal = document.getElementById('modal-generic-form');
+  if (modal) modal.classList.add('active');
+}
+
+function addItemToActiveTrip(itemObj) {
+  const trip = tripsData.find(t => t.id === activeTripId);
+  if (!trip) return;
+  if (!trip.items) trip.items = [];
+  trip.items.push(itemObj);
+  saveToLocalStorage();
+  openTripDetail(activeTripId);
+}
+
+function saveAdvancedFlight(e) {
+  e.preventDefault();
+  const flightNo = document.getElementById('flight-no')?.value || '';
+  const airline = document.getElementById('flight-airline')?.value || '';
+  const origin = document.getElementById('flight-origin')?.value.toUpperCase() || '';
+  const dest = document.getElementById('flight-dest')?.value.toUpperCase() || '';
+  const time = document.getElementById('flight-dep-time')?.value || '';
+  const cost = document.getElementById('flight-total-cost')?.value || '';
+  const paymentMethod = document.getElementById('flight-payment-method')?.value || '';
+
+  const itemObj = {
+    id: 'item_' + Date.now(),
+    type: 'flight',
+    title: `${origin} ➔ ${dest}`,
+    subtitle: `${airline} (${flightNo})`,
+    time: time,
+    cost: cost,
+    origin: origin,
+    dest: dest,
+    airline: airline,
+    flightNo: flightNo,
+    paymentMethod: paymentMethod
+  };
+
+  addItemToActiveTrip(itemObj);
+  closeModals();
+}
+
+function saveAdvancedHotel(e) {
+  e.preventDefault();
+  const name = document.getElementById('hotel-name')?.value || '';
+  const checkin = document.getElementById('hotel-checkin')?.value || '';
+  const cost = document.getElementById('hotel-cost')?.value || '';
+  const address = document.getElementById('hotel-address')?.value || '';
+  const paymentMethod = document.getElementById('hotel-payment-method')?.value || '';
+
+  const itemObj = {
+    id: 'item_' + Date.now(),
+    type: 'hotel',
+    title: name,
+    subtitle: address || 'Reserva de Hotel',
+    time: checkin,
+    checkin: checkin,
+    cost: cost,
+    paymentMethod: paymentMethod
+  };
+
+  addItemToActiveTrip(itemObj);
+  closeModals();
+}
+
+function saveAdvancedCar(e) {
+  e.preventDefault();
+  const company = document.getElementById('car-company')?.value || '';
+  const model = document.getElementById('car-model')?.value || '';
+  const pickup = document.getElementById('car-pickup')?.value || '';
+  const cost = document.getElementById('car-cost')?.value || '';
+  const paymentMethod = document.getElementById('car-payment-method')?.value || '';
+
+  const itemObj = {
+    id: 'item_' + Date.now(),
+    type: 'car',
+    title: `${company} - ${model}`,
+    subtitle: 'Alquiler de Vehículo',
+    time: pickup,
+    cost: cost,
+    paymentMethod: paymentMethod
+  };
+
+  addItemToActiveTrip(itemObj);
+  closeModals();
+}
+
+function saveAdvancedRestaurant(e) {
+  e.preventDefault();
+  const name = document.getElementById('restaurant-name')?.value || '';
+  const time = document.getElementById('restaurant-time')?.value || '';
+  const cost = document.getElementById('restaurant-cost')?.value || '';
+  const address = document.getElementById('restaurant-address')?.value || '';
+  const paymentMethod = document.getElementById('restaurant-payment-method')?.value || '';
+
+  const itemObj = {
+    id: 'item_' + Date.now(),
+    type: 'restaurant',
+    title: name,
+    subtitle: address || 'Reserva de Restaurante',
+    time: time,
+    cost: cost,
+    paymentMethod: paymentMethod
+  };
+
+  addItemToActiveTrip(itemObj);
+  closeModals();
+}
+
+function saveGenericItem(e) {
+  e.preventDefault();
+  const type = document.getElementById('generic-item-type')?.value || 'activity';
+  const title = document.getElementById('generic-title')?.value || '';
+  const time = document.getElementById('generic-time')?.value || '';
+  const sub = document.getElementById('generic-sub')?.value || '';
+  const paymentMethod = document.getElementById('generic-payment-method')?.value || '';
+
+  const itemObj = {
+    id: 'item_' + Date.now(),
+    type: type,
+    title: title,
+    subtitle: sub,
+    time: time,
+    paymentMethod: paymentMethod
+  };
+
+  addItemToActiveTrip(itemObj);
+  closeModals();
+}
+
+function openItemDetailsModal(item) {
+  activeItemId = item.id;
+  const titleEl = document.getElementById('item-detail-title');
+  const bodyEl = document.getElementById('item-detail-body');
+  if (titleEl) titleEl.textContent = item.title || 'Detalle del Evento';
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div style="font-size:0.85rem; color:#fff; font-weight:700;">${item.title}</div>
+      <div style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">${item.subtitle || ''}</div>
+      <div style="font-size:0.75rem; color:#38bdf8; margin-top:6px;"><i class="fa-solid fa-clock"></i> ${item.time ? new Date(item.time).toLocaleString() : 'Sin hora'}</div>
+      ${item.cost ? `<div style="font-size:0.85rem; color:#10b981; font-weight:800; margin-top:6px;">Costo: $${item.cost}</div>` : ''}
+      ${item.paymentMethod ? `<div style="font-size:0.72rem; color:#cbd5e1; margin-top:4px;"><i class="fa-solid fa-credit-card"></i> ${item.paymentMethod}</div>` : ''}
+    `;
+  }
+  const modal = document.getElementById('modal-item-details');
+  if (modal) modal.classList.add('active');
+}
+
+function deleteActiveItem() {
+  const trip = tripsData.find(t => t.id === activeTripId);
+  if (trip && trip.items) {
+    trip.items = trip.items.filter(i => i.id !== activeItemId);
+    saveToLocalStorage();
+    openTripDetail(activeTripId);
+  }
+  closeModals();
+}
+
+function editActiveItem() {
+  closeModals();
 }
 
 function getAllAirFlights() {
@@ -449,7 +643,7 @@ function exportLocalJson() {
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ trips: tripsData, payments: paymentMethods, packing: packingList }, null, 2));
   const downloadAnchor = document.createElement('a');
   downloadAnchor.setAttribute("href", dataStr);
-  downloadAnchor.setAttribute("download", `TripMaster_Backup_${new Date().toISOString().split('T')[0]}.json`);
+  downloadAnchor.setAttribute("download", `TripMast3r_Pro_Backup_${new Date().toISOString().split('T')[0]}.json`);
   document.body.appendChild(downloadAnchor);
   downloadAnchor.click();
   downloadAnchor.remove();
@@ -469,7 +663,7 @@ function importLocalJson(event) {
       renderTripsList();
       renderPaymentMethods();
       renderPackingList();
-      alert('¡Copia de seguridad cargada con éxito!');
+      alert('¡Copia de seguridad cargada con éxito en TripMast3r Pro!');
     } catch (err) {
       alert('Error al leer el archivo JSON.');
     }
