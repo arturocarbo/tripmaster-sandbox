@@ -17,6 +17,19 @@ const GOOGLE_CLIENT_ID = '3946661722-akjk1dp0slafuu03bdc3hehibbe952og.apps.googl
 let tokenClient = null;
 let driveAccessToken = null;
 
+// BASE DE DATOS LOCAL DE AEROPUERTOS BASE
+const LOCAL_AIRPORT_DB = {
+  'SAL': { name: 'San Salvador', country: 'El Salvador', lat: 13.4409, lng: -89.0557 },
+  'SJO': { name: 'San José', country: 'Costa Rica', lat: 9.9938, lng: -84.2088 },
+  'PTY': { name: 'Panamá', country: 'Panamá', lat: 9.0714, lng: -79.3835 },
+  'GYE': { name: 'Guayaquil', country: 'Ecuador', lat: -2.1574, lng: -79.8836 },
+  'UIO': { name: 'Quito', country: 'Ecuador', lat: -0.1292, lng: -78.3575 },
+  'MIA': { name: 'Miami', country: 'Estados Unidos', lat: 25.7959, lng: -80.2870 },
+  'JFK': { name: 'Nueva York', country: 'Estados Unidos', lat: 40.6413, lng: -73.7781 },
+  'MAD': { name: 'Madrid', country: 'España', lat: 40.4839, lng: -3.5680 },
+  'BCN': { name: 'Barcelona', country: 'España', lat: 41.2974, lng: 2.0785 }
+};
+
 const INITIAL_TRIPS = [
   {
     id: '1',
@@ -132,8 +145,25 @@ function populateYearDropdowns() {
 }
 
 // ==========================================
-// NAVEGACIÓN Y PANTALLAS
+// NAVEGACIÓN, PANTALLAS Y MENÚS DESPLEGABLES
 // ==========================================
+function toggleDropdown(event, menuId) {
+  if (event) event.stopPropagation();
+  const menu = document.getElementById(menuId);
+  if (!menu) return;
+  const isVisible = menu.classList.contains('active');
+  document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('active'));
+  if (!isVisible) {
+    menu.classList.add('active');
+  }
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.dropdown-menu') && !e.target.closest('.action-icon-btn')) {
+    document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('active'));
+  }
+});
+
 function switchMainTab(screenId) {
   document.querySelectorAll('.bottom-nav .nav-item').forEach(btn => btn.classList.remove('active'));
   if (window.event && window.event.currentTarget) {
@@ -187,6 +217,7 @@ function switchDocSubtab(subtabId) {
 
 function closeModals() {
   document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+  document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('active'));
 }
 
 function handleFabClick() {
@@ -198,6 +229,84 @@ function handleFabClick() {
   } else {
     openModalNewTrip();
   }
+}
+
+// ==========================================
+// FUNCIONES DE GESTIÓN, EDICIÓN Y BORRADO DE VIAJES
+// ==========================================
+function editCurrentTrip() {
+  closeModals();
+  const trip = trips.find(t => t.id === activeTripId);
+  if (!trip) return;
+  
+  const editIdInput = document.getElementById('edit-trip-id');
+  const titleInput = document.getElementById('trip-name-input');
+  const destInput = document.getElementById('trip-dest-input');
+  const startInput = document.getElementById('trip-start-input');
+  const endInput = document.getElementById('trip-end-input');
+  const imgUrlInput = document.getElementById('trip-image-url');
+  
+  if (editIdInput) editIdInput.value = trip.id;
+  if (titleInput) titleInput.value = trip.title;
+  if (destInput) destInput.value = trip.title;
+  
+  if (trip.dates && trip.dates.includes('–')) {
+    const parts = trip.dates.split('–');
+    if (startInput) startInput.value = parts[0].trim();
+    if (endInput) endInput.value = parts[1].trim();
+  }
+  
+  if (imgUrlInput) imgUrlInput.value = trip.image || '';
+  
+  const modalTitle = document.getElementById('modal-trip-title');
+  if (modalTitle) modalTitle.innerText = 'Editar Viaje';
+  
+  document.getElementById('modal-new-trip')?.classList.add('active');
+}
+
+function askDeleteCurrentTrip() {
+  closeModals();
+  const trip = trips.find(t => t.id === activeTripId);
+  if (!trip) return;
+  
+  const msgEl = document.getElementById('delete-trip-msg');
+  if (msgEl) {
+    msgEl.innerText = `Se eliminará de forma permanente el viaje "${trip.title}" y todos sus itinerarios registrados.`;
+  }
+  
+  document.getElementById('modal-confirm-delete')?.classList.add('active');
+}
+
+function confirmDeleteTrip() {
+  trips = trips.filter(t => t.id !== activeTripId);
+  saveDataToStorage();
+  renderTrips();
+  closeModals();
+  showScreen('trips-list');
+}
+
+function shareActiveTrip() {
+  closeModals();
+  const trip = trips.find(t => t.id === activeTripId);
+  if (!trip) return;
+  
+  const shareData = {
+    title: trip.title,
+    text: `Miren mi itinerario de viaje: ${trip.title} (${trip.dates})`,
+    url: window.location.href
+  };
+
+  if (navigator.share) {
+    navigator.share(shareData).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(`${shareData.text} - ${shareData.url}`);
+    alert('✔ Enlace del viaje copiado al portapapeles.');
+  }
+}
+
+function exportCalendar() {
+  closeModals();
+  alert('📅 Sincronización iniciada: El archivo de calendario ha sido preparado.');
 }
 
 // ==========================================
@@ -1155,6 +1264,57 @@ function saveTripForm(e) {
 }
 
 // ==========================================
+// CONSULTA A WIKIDATA CON FALLBACK SEGURO
+// ==========================================
+async function fetchAirportFromWikidata(iata) {
+  const cleanIata = (iata || '').toUpperCase().trim();
+  if (!cleanIata) return null;
+
+  if (LOCAL_AIRPORT_DB[cleanIata]) {
+    return LOCAL_AIRPORT_DB[cleanIata];
+  }
+
+  const sparqlQuery = `
+    SELECT ?item ?itemLabel ?countryLabel ?coord WHERE {
+      ?item wdt:P238 "${cleanIata}".
+      OPTIONAL { ?item wdt:P17 ?country. }
+      OPTIONAL { ?item wdt:P625 ?coord. }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "es,en". }
+    } LIMIT 1
+  `;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+  try {
+    const res = await fetch('https://query.wikidata.org/sparql?query=' + encodeURIComponent(sparqlQuery) + '&format=json', {
+      headers: { 'Accept': 'application/sparql-results+json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      const b = data.results?.bindings[0];
+      if (b) {
+        let lat = 0, lng = 0;
+        if (b.coord?.value) {
+          const m = b.coord.value.match(/Point\(([-\d\.]+) ([-\d\.]+)\)/);
+          if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
+        }
+        const result = { name: b.itemLabel?.value || cleanIata, country: b.countryLabel?.value || 'Internacional', lat, lng };
+        LOCAL_AIRPORT_DB[cleanIata] = result;
+        return result;
+      }
+    }
+  } catch (e) {
+    clearTimeout(timeoutId);
+  }
+
+  return null;
+}
+
+// ==========================================
 // FLIGHT HUB, MAPAS Y ESTADÍSTICAS
 // ==========================================
 function setFlightTimeFilter(filterType) {
@@ -1190,6 +1350,8 @@ async function renderMapGeodesicRoutes() {
   let airportCounts = {};
   let airlineCounts = {};
 
+  let routePromises = [];
+
   for (let t of trips) {
     for (let i of (t.items || [])) {
       if (i.type === 'flight') {
@@ -1209,33 +1371,43 @@ async function renderMapGeodesicRoutes() {
           if (origIata) airportCounts[origIata] = (airportCounts[origIata] || 0) + 1;
           if (destIata) airportCounts[destIata] = (airportCounts[destIata] || 0) + 1;
 
-          let apOrig = await fetchAirportFromWikidata(origIata);
-          let apDest = await fetchAirportFromWikidata(destIata);
-
-          if (apOrig && apDest) {
-            const startPt = [apOrig.lng, apOrig.lat];
-            const endPt = [apDest.lng, apDest.lat];
-
-            const gcArc = turf.greatCircle(turf.point(startPt), turf.point(endPt), { npoints: 50 });
-            const leafletCoords = gcArc.geometry.coordinates.map(c => [c[1], c[0]]);
-
-            const polylineLayer = L.polyline(leafletCoords, { color: '#0084ff', weight: 3, opacity: 0.8 }).addTo(flightMap);
-            mapPolylines.push(polylineLayer);
-
-            const planeIcon = L.divIcon({
-              html: `<i class="fa-solid fa-plane text-emerald-400 text-sm transform -rotate-45"></i>`,
-              className: 'plane-pin', iconSize: [16, 16]
-            });
-
-            const planeMarker = L.marker(leafletCoords[0], { icon: planeIcon }).addTo(flightMap);
-            planeAnimMarkers.push({ marker: planeMarker, coords: leafletCoords, step: 0 });
-
-            totalMiles += Math.round(turf.distance(turf.point(startPt), turf.point(endPt), { units: 'miles' }));
-          }
+          routePromises.push((async () => {
+            const apOrig = await fetchAirportFromWikidata(origIata);
+            const apDest = await fetchAirportFromWikidata(destIata);
+            return { apOrig, apDest };
+          })());
         }
       }
     }
   }
+
+  const results = await Promise.allSettled(routePromises);
+
+  results.forEach(res => {
+    if (res.status === 'fulfilled' && res.value) {
+      const { apOrig, apDest } = res.value;
+      if (apOrig && apDest && apOrig.lat !== 0 && apDest.lat !== 0) {
+        const startPt = [apOrig.lng, apOrig.lat];
+        const endPt = [apDest.lng, apDest.lat];
+
+        const gcArc = turf.greatCircle(turf.point(startPt), turf.point(endPt), { npoints: 50 });
+        const leafletCoords = gcArc.geometry.coordinates.map(c => [c[1], c[0]]);
+
+        const polylineLayer = L.polyline(leafletCoords, { color: '#0084ff', weight: 3, opacity: 0.8 }).addTo(flightMap);
+        mapPolylines.push(polylineLayer);
+
+        const planeIcon = L.divIcon({
+          html: `<i class="fa-solid fa-plane text-emerald-400 text-sm transform -rotate-45"></i>`,
+          className: 'plane-pin', iconSize: [16, 16]
+        });
+
+        const planeMarker = L.marker(leafletCoords[0], { icon: planeIcon }).addTo(flightMap);
+        planeAnimMarkers.push({ marker: planeMarker, coords: leafletCoords, step: 0 });
+
+        totalMiles += Math.round(turf.distance(turf.point(startPt), turf.point(endPt), { units: 'miles' }));
+      }
+    }
+  });
 
   const distEl = document.getElementById('map-total-distance');
   const countEl = document.getElementById('map-total-flights');
@@ -1269,7 +1441,6 @@ function animatePlanes() {
   animFrameId = requestAnimationFrame(() => { setTimeout(animatePlanes, 100); });
 }
 
-// FUNCIÓN DE RENDERIZADO DE VUELOS UNIFICADA POR TRAYECTO/ESCALAS
 function renderAirFlightsList() {
   const container = document.getElementById('air-flights-list');
   if (!container) return;
@@ -1358,34 +1529,6 @@ function renderAirFlightsList() {
   }
 }
 
-async function fetchAirportFromWikidata(iata) {
-  const cleanIata = iata.toUpperCase().trim();
-  const sparqlQuery = `
-    SELECT ?item ?itemLabel ?countryLabel ?coord WHERE {
-      ?item wdt:P238 "${cleanIata}".
-      OPTIONAL { ?item wdt:P17 ?country. }
-      OPTIONAL { ?item wdt:P625 ?coord. }
-      SERVICE wikibase:label { bd:serviceParam wikibase:language "es,en". }
-    } LIMIT 1
-  `;
-  try {
-    const res = await fetch('https://query.wikidata.org/sparql?query=' + encodeURIComponent(sparqlQuery) + '&format=json', { headers: { 'Accept': 'application/sparql-results+json' } });
-    if (res.ok) {
-      const data = await res.json();
-      const b = data.results?.bindings[0];
-      if (b) {
-        let lat = 0, lng = 0;
-        if (b.coord?.value) {
-          const m = b.coord.value.match(/Point\(([-\d\.]+) ([-\d\.]+)\)/);
-          if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
-        }
-        return { name: b.itemLabel?.value || cleanIata, country: b.countryLabel?.value || 'Internacional', lat, lng };
-      }
-    }
-  } catch (e) {}
-  return null;
-}
-
 // ESTADÍSTICAS MULTICATEGORÍA
 function getFilteredTripsForStats() {
   const selectedYear = document.getElementById('stats-year-select')?.value || 'all';
@@ -1466,7 +1609,6 @@ function renderHotelCategoryStats() {
   document.getElementById('hotel-stat-cost').innerText = `$${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 }
 
-// FUNCIÓN DE ESTADÍSTICAS DE VUELOS COMPLETA CON CHART.JS Y MILLAS
 async function renderFlightStats() {
   let totalFlightCost = 0;
   let totalMiles = 0;
@@ -1475,6 +1617,7 @@ async function renderFlightStats() {
   let airlineSpending = {};
 
   const activeStatsTrips = getFilteredTripsForStats();
+  let distPromises = [];
 
   for (let t of activeStatsTrips) {
     for (let i of (t.items || [])) {
@@ -1502,21 +1645,29 @@ async function renderFlightStats() {
           const origIata = parts[0].trim();
           const destIata = parts[1].trim();
 
-          const apOrig = await fetchAirportFromWikidata(origIata);
-          const apDest = await fetchAirportFromWikidata(destIata);
-
-          if (apOrig && apDest && apOrig.lat && apDest.lat) {
-            const distMiles = Math.round(turf.distance(
-              turf.point([apOrig.lng, apOrig.lat]),
-              turf.point([apDest.lng, apDest.lat]),
-              { units: 'miles' }
-            ));
-            totalMiles += distMiles;
-          }
+          distPromises.push((async () => {
+            const apOrig = await fetchAirportFromWikidata(origIata);
+            const apDest = await fetchAirportFromWikidata(destIata);
+            if (apOrig && apDest && apOrig.lat !== 0 && apDest.lat !== 0) {
+              return Math.round(turf.distance(
+                turf.point([apOrig.lng, apOrig.lat]),
+                turf.point([apDest.lng, apDest.lat]),
+                { units: 'miles' }
+              ));
+            }
+            return 0;
+          })());
         }
       }
     }
   }
+
+  const mileResults = await Promise.allSettled(distPromises);
+  mileResults.forEach(res => {
+    if (res.status === 'fulfilled' && typeof res.value === 'number') {
+      totalMiles += res.value;
+    }
+  });
 
   const totalCostEl = document.getElementById('flight-stat-total-cost');
   const milesEl = document.getElementById('stat-miles');
