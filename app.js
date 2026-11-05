@@ -17,19 +17,6 @@ const GOOGLE_CLIENT_ID = '3946661722-akjk1dp0slafuu03bdc3hehibbe952og.apps.googl
 let tokenClient = null;
 let driveAccessToken = null;
 
-// BASE DE DATOS LOCAL DE AEROPUERTOS PARA EVITAR BLOQUEOS DE RED API
-const LOCAL_AIRPORT_DB = {
-  'SAL': { name: 'San Salvador', country: 'El Salvador', lat: 13.4409, lng: -89.0557 },
-  'SJO': { name: 'San José', country: 'Costa Rica', lat: 9.9938, lng: -84.2088 },
-  'PTY': { name: 'Panamá', country: 'Panamá', lat: 9.0714, lng: -79.3835 },
-  'GYE': { name: 'Guayaquil', country: 'Ecuador', lat: -2.1574, lng: -79.8836 },
-  'UIO': { name: 'Quito', country: 'Ecuador', lat: -0.1292, lng: -78.3575 },
-  'MIA': { name: 'Miami', country: 'Estados Unidos', lat: 25.7959, lng: -80.2870 },
-  'JFK': { name: 'Nueva York', country: 'Estados Unidos', lat: 40.6413, lng: -73.7781 },
-  'MAD': { name: 'Madrid', country: 'España', lat: 40.4839, lng: -3.5680 },
-  'BCN': { name: 'Barcelona', country: 'España', lat: 41.2974, lng: 2.0785 }
-};
-
 const INITIAL_TRIPS = [
   {
     id: '1',
@@ -1177,12 +1164,6 @@ function setFlightTimeFilter(filterType) {
   renderAirFlightsList();
 }
 
-function getAirportCoords(iata) {
-  const code = (iata || '').toUpperCase().trim();
-  if (LOCAL_AIRPORT_DB[code]) return LOCAL_AIRPORT_DB[code];
-  return { name: code, country: 'Global', lat: 0, lng: 0 };
-}
-
 function initFlightMap() {
   if (!flightMap) {
     flightMap = L.map('leafletMap', { zoomControl: false }).setView([10, -75], 2);
@@ -1194,7 +1175,7 @@ function initFlightMap() {
   }, 200);
 }
 
-function renderMapGeodesicRoutes() {
+async function renderMapGeodesicRoutes() {
   if (!flightMap) return;
 
   planeAnimMarkers.forEach(p => flightMap.removeLayer(p.marker));
@@ -1228,10 +1209,10 @@ function renderMapGeodesicRoutes() {
           if (origIata) airportCounts[origIata] = (airportCounts[origIata] || 0) + 1;
           if (destIata) airportCounts[destIata] = (airportCounts[destIata] || 0) + 1;
 
-          let apOrig = getAirportCoords(origIata);
-          let apDest = getAirportCoords(destIata);
+          let apOrig = await fetchAirportFromWikidata(origIata);
+          let apDest = await fetchAirportFromWikidata(destIata);
 
-          if (apOrig.lat !== 0 && apDest.lat !== 0) {
+          if (apOrig && apDest) {
             const startPt = [apOrig.lng, apOrig.lat];
             const endPt = [apDest.lng, apDest.lat];
 
@@ -1288,7 +1269,7 @@ function animatePlanes() {
   animFrameId = requestAnimationFrame(() => { setTimeout(animatePlanes, 100); });
 }
 
-// RENDERIZADO DE VUELOS EN FLIGHT HUB CON ESCALAS UNIFICADAS
+// FUNCIÓN DE RENDERIZADO DE VUELOS UNIFICADA POR TRAYECTO/ESCALAS
 function renderAirFlightsList() {
   const container = document.getElementById('air-flights-list');
   if (!container) return;
@@ -1377,7 +1358,35 @@ function renderAirFlightsList() {
   }
 }
 
-// ESTADÍSTICAS MULTICATEGORÍA SIN BLOQUEO SÍNCRONO
+async function fetchAirportFromWikidata(iata) {
+  const cleanIata = iata.toUpperCase().trim();
+  const sparqlQuery = `
+    SELECT ?item ?itemLabel ?countryLabel ?coord WHERE {
+      ?item wdt:P238 "${cleanIata}".
+      OPTIONAL { ?item wdt:P17 ?country. }
+      OPTIONAL { ?item wdt:P625 ?coord. }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "es,en". }
+    } LIMIT 1
+  `;
+  try {
+    const res = await fetch('https://query.wikidata.org/sparql?query=' + encodeURIComponent(sparqlQuery) + '&format=json', { headers: { 'Accept': 'application/sparql-results+json' } });
+    if (res.ok) {
+      const data = await res.json();
+      const b = data.results?.bindings[0];
+      if (b) {
+        let lat = 0, lng = 0;
+        if (b.coord?.value) {
+          const m = b.coord.value.match(/Point\(([-\d\.]+) ([-\d\.]+)\)/);
+          if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
+        }
+        return { name: b.itemLabel?.value || cleanIata, country: b.countryLabel?.value || 'Internacional', lat, lng };
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+// ESTADÍSTICAS MULTICATEGORÍA
 function getFilteredTripsForStats() {
   const selectedYear = document.getElementById('stats-year-select')?.value || 'all';
   if (selectedYear === 'all') return trips;
@@ -1457,8 +1466,8 @@ function renderHotelCategoryStats() {
   document.getElementById('hotel-stat-cost').innerText = `$${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 }
 
-// ESTADÍSTICAS DE VUELOS CORREGIDAS
-function renderFlightStats() {
+// FUNCIÓN DE ESTADÍSTICAS DE VUELOS COMPLETA CON CHART.JS Y MILLAS
+async function renderFlightStats() {
   let totalFlightCost = 0;
   let totalMiles = 0;
   let totalFlightMinutes = 0;
@@ -1493,10 +1502,10 @@ function renderFlightStats() {
           const origIata = parts[0].trim();
           const destIata = parts[1].trim();
 
-          const apOrig = getAirportCoords(origIata);
-          const apDest = getAirportCoords(destIata);
+          const apOrig = await fetchAirportFromWikidata(origIata);
+          const apDest = await fetchAirportFromWikidata(destIata);
 
-          if (apOrig.lat !== 0 && apDest.lat !== 0) {
+          if (apOrig && apDest && apOrig.lat && apDest.lat) {
             const distMiles = Math.round(turf.distance(
               turf.point([apOrig.lng, apOrig.lat]),
               turf.point([apDest.lng, apDest.lat]),
