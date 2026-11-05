@@ -5,23 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>TripMaster Pro</title>
 
-  <!-- Tailwind CSS -->
+  <!-- PWA Meta Tags para iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TripMaster">
+
+  <!-- Estilos y Librerías Externas -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-  <!-- Leaflet CSS & JS (Mapas) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- Turf.js (Cálculos Geodésicos de Distancia y Rutas) -->
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-
-  <!-- Chart.js (Estadísticas y Gráficos) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- Google Auth API (Respaldos Drive) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
@@ -38,7 +33,7 @@
     body {
       background-color: var(--bg-dark);
       color: var(--text-main);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       margin: 0;
       padding-bottom: 80px;
       -webkit-tap-highlight-color: transparent;
@@ -47,16 +42,14 @@
     .screen { display: none; padding: 16px; max-width: 600px; margin: 0 auto; }
     .screen.active { display: block; }
 
-    /* Componentes Generales */
     .app-header {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 16px; background: rgba(15, 23, 42, 0.9);
+      padding: 12px 16px; background: rgba(15, 23, 42, 0.95);
       backdrop-filter: blur(8px); position: sticky; top: 0; z-index: 40;
       border-bottom: 1px solid rgba(255,255,255,0.05);
     }
     .app-title { font-weight: 800; font-size: 1.25rem; color: #fff; }
 
-    /* Tarjetas de Viaje */
     .trip-card {
       background: var(--card-bg); border-radius: 16px; overflow: hidden;
       margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.05); cursor: pointer;
@@ -70,7 +63,6 @@
       font-size: 0.75rem; font-weight: 600; padding: 4px 8px; border-radius: 6px; margin-top: 8px;
     }
 
-    /* Línea de Tiempo (Timeline) */
     .timeline-item { display: flex; gap: 12px; margin-bottom: 16px; position: relative; }
     .time-column { font-size: 0.75rem; color: var(--text-muted); width: 45px; text-align: right; font-weight: 600; }
     .time-zone { display: block; font-size: 0.65rem; color: #64748b; }
@@ -94,10 +86,9 @@
     .card-status { font-size: 0.68rem; font-weight: 700; color: #10b981; text-transform: uppercase; }
     .card-subdetail { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
     .card-meta { font-size: 0.75rem; color: #cbd5e1; margin-top: 6px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px; }
-    .day-header { font-weight: 800; font-size: 0.85rem; color: var(--accent); margin: 20px 0 10px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+    .day-header { font-weight: 800; font-size: 0.85rem; color: var(--accent); margin: 20px 0 10px 0; text-transform: uppercase; }
     .layover-box { background: rgba(255,183,3,0.1); color: var(--accent); font-size: 0.75rem; font-weight: 600; padding: 6px 12px; border-radius: 8px; margin: 8px 0 16px 57px; }
 
-    /* Barra de Navegación Inferior */
     .bottom-nav {
       position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: #090d16;
       display: flex; justify-content: space-around; align-items: center; border-top: 1px solid rgba(255,255,255,0.08); z-index: 50;
@@ -106,33 +97,28 @@
     .nav-item i { font-size: 1.2rem; margin-bottom: 3px; }
     .nav-item.active { color: var(--primary); }
 
-    /* Botón Flotante Action (FAB) */
     .fab-btn {
       position: fixed; bottom: 80px; right: 20px; width: 52px; height: 52px; border-radius: 50%;
       background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center;
       font-size: 1.4rem; box-shadow: 0 4px 12px rgba(0,132,255,0.4); border: none; cursor: pointer; z-index: 45;
     }
 
-    /* Modales y Filtros */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); display: none; align-items: flex-end; justify-content: center; z-index: 100; }
     .modal-overlay.active { display: flex; }
     .modal-content { background: var(--card-bg); width: 100%; max-width: 600px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 90vh; overflow-y: auto; }
     .pill-btn { padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; }
     .pill-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
-    /* Mapas & Estadísticas */
-    #leafletMap { width: 100%; height: 260px; border-radius: 12px; margin-bottom: 16px; }
+    #leafletMap { width: 100%; height: 280px; border-radius: 12px; margin-bottom: 16px; }
     .dark-card { background: var(--card-bg); border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.05); }
     .top-list-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; }
     .top-list-badge { background: rgba(0,132,255,0.15); color: var(--primary); padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
 
-    /* PWA Toast */
     #update-toast { display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #10b981; color: #fff; padding: 10px 16px; border-radius: 30px; font-size: 0.8rem; font-weight: 700; z-index: 200; box-shadow: 0 4px 12px rgba(0,0,0,0.3); align-items: center; gap: 10px; }
   </style>
 </head>
 <body>
 
-  <!-- Toast de actualización PWA -->
   <div id="update-toast">
     <span>Nueva versión disponible</span>
     <button onclick="reloadAppVersion()" style="background:#fff; color:#10b981; border:none; padding:4px 10px; border-radius:12px; font-weight:800; cursor:pointer;">Actualizar</button>
@@ -142,13 +128,13 @@
   <header class="app-header">
     <div class="app-title"><i class="fa-solid fa-plane-departure text-blue-500 mr-2"></i>TripMaster Pro</div>
     <div style="display:flex; gap:8px;">
-      <button class="action-icon-btn" onclick="openModalMergeTrips()" title="Unir Viajes" style="color:#38bdf8; background:none; border:none; font-size:1.1rem; cursor:pointer;"><i class="fa-solid fa-code-merge"></i></button>
-      <button class="action-icon-btn" onclick="openModalImportAppInTheAir()" title="Importar App in the Air" style="color:#ffb703; background:none; border:none; font-size:1.1rem; cursor:pointer;"><i class="fa-solid fa-file-import"></i></button>
-      <button class="action-icon-btn" onclick="showScreen('settings')" style="color:#cbd5e1; background:none; border:none; font-size:1.1rem; cursor:pointer;"><i class="fa-solid fa-gear"></i></button>
+      <button onclick="openModalMergeTrips()" title="Unir Viajes" style="color:#38bdf8; background:none; border:none; font-size:1.1rem; cursor:pointer;"><i class="fa-solid fa-code-merge"></i></button>
+      <button onclick="openModalImportAppInTheAir()" title="Importar App in the Air" style="color:#ffb703; background:none; border:none; font-size:1.1rem; cursor:pointer;"><i class="fa-solid fa-file-import"></i></button>
+      <button onclick="showScreen('settings')" style="color:#cbd5e1; background:none; border:none; font-size:1.1rem; cursor:pointer;"><i class="fa-solid fa-gear"></i></button>
     </div>
   </header>
 
-  <!-- PANTALLA 1: LISTA DE VIAJES -->
+  <!-- SECCIÓN 1: VIAJES -->
   <section id="screen-trips-list" class="screen active">
     <div style="display:flex; gap:8px; margin-bottom:12px;">
       <input type="text" id="trip-search-input" onkeyup="filterTripsList()" placeholder="Buscar viaje..." style="flex:1; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:8px 12px; color:#fff; font-size:0.85rem;">
@@ -166,7 +152,7 @@
     <div id="trips-container"></div>
   </section>
 
-  <!-- PANTALLA 2: DETALLE DEL VIAJE -->
+  <!-- DETALLE DEL VIAJE -->
   <section id="screen-trip-detail" class="screen">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <button onclick="showScreen('trips-list')" style="color:#38bdf8; background:none; border:none; font-size:0.85rem; font-weight:700; cursor:pointer;"><i class="fa-solid fa-arrow-left"></i> Volver</button>
@@ -189,41 +175,15 @@
     <div id="timeline-container"></div>
   </section>
 
-  <!-- PANTALLA 3: FLIGHT HUB (ESTADÍSTICAS, MAPA Y MÁS) -->
-  <section id="screen-flight-stats" class="screen">
-    <div style="display:flex; gap:6px; overflow-x:auto; margin-bottom:14px; padding-bottom:4px;">
-      <button class="pill-btn flight-tab-btn active" onclick="switchFlightTab('mapa')">🗺 Mapa</button>
-      <button class="pill-btn flight-tab-btn" onclick="switchFlightTab('vuelos')">✈ Vuelos</button>
-      <button class="pill-btn flight-tab-btn" onclick="switchFlightTab('stats')">📊 Métricas</button>
-      <button class="pill-btn flight-tab-btn" onclick="switchFlightTab('aeropuertos')">🏢 Aeropuertos</button>
-      <button class="pill-btn flight-tab-btn" onclick="switchFlightTab('equipaje')">🧳 Equipaje</button>
-    </div>
-
-    <!-- Subvista Mapa -->
-    <div id="subview-mapa" class="flight-subview active">
-      <div id="leafletMap"></div>
-      <div class="grid grid-cols-2 gap-3 mb-3">
-        <div class="dark-card" style="margin:0;">
-          <span style="font-size:0.7rem; color:#94a3b8; display:block;">Distancia Volada</span>
-          <span id="map-total-distance" style="font-size:1.1rem; font-weight:800; color:#0084ff;">0 mi</span>
-        </div>
-        <div class="dark-card" style="margin:0;">
-          <span style="font-size:0.7rem; color:#94a3b8; display:block;">Total Trayectos</span>
-          <span id="map-total-flights" style="font-size:1.1rem; font-weight:800; color:#10b981;">0</span>
-        </div>
-      </div>
-      <div class="dark-card">
-        <div style="font-size:0.8rem; font-weight:700; color:#fff; margin-bottom:6px;">Aeropuertos Frecuentes</div>
-        <ul id="map-top-airports"></ul>
-      </div>
-      <div class="dark-card">
-        <div style="font-size:0.8rem; font-weight:700; color:#fff; margin-bottom:6px;">Aerolíneas Utilizadas</div>
-        <ul id="map-top-airlines"></ul>
-      </div>
+  <!-- SECCIÓN 2: FLIGHT HUB -->
+  <section id="screen-flight-hub" class="screen">
+    <div style="display:flex; gap:6px; margin-bottom:14px;">
+      <button class="pill-btn flight-hub-tab active" onclick="switchFlightHubSubtab('vuelos')">✈ Vuelos</button>
+      <button class="pill-btn flight-hub-tab" onclick="switchFlightHubSubtab('stats')">📊 Stats / Métricas</button>
     </div>
 
     <!-- Subvista Vuelos -->
-    <div id="subview-vuelos" class="flight-subview" style="display:none;">
+    <div id="subview-flighthub-vuelos" class="flighthub-subview">
       <div style="display:flex; gap:6px; margin-bottom:12px;">
         <button id="pill-flight-all" class="pill-btn active" onclick="setFlightTimeFilter('all')">Todos</button>
         <button id="pill-flight-upcoming" class="pill-btn" onclick="setFlightTimeFilter('upcoming')">Próximos</button>
@@ -232,11 +192,11 @@
       <div id="air-flights-list"></div>
     </div>
 
-    <!-- Subvista Métricas -->
-    <div id="subview-stats" class="flight-subview" style="display:none;">
+    <!-- Subvista Stats / Métricas -->
+    <div id="subview-flighthub-stats" class="flighthub-subview" style="display:none;">
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
         <select id="stats-category-select" onchange="renderSelectedCategoryStats()" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:8px; color:#fff; font-size:0.8rem;">
-          <option value="trips">🧳 Viajes & Destinos</option>
+          <option value="trips">🧳 Estadísticas de Viajes</option>
           <option value="flights">✈ Vuelos & Tarifas</option>
           <option value="hotels">🏨 Hoteles & Noches</option>
         </select>
@@ -245,20 +205,18 @@
         </select>
       </div>
 
-      <!-- Panel Métricas Viajes -->
       <div id="stats-panel-trips">
         <div class="grid grid-cols-2 gap-3 mb-3">
-          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Días Viajados</span><span id="trip-stat-days" style="font-size:1.1rem; font-weight:800; color:#38bdf8;">0</span></div>
-          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Total Viajes</span><span id="trip-stat-count" style="font-size:1.1rem; font-weight:800; color:#10b981;">0</span></div>
+          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Días Totales</span><span id="trip-stat-days" style="font-size:1.1rem; font-weight:800; color:#38bdf8;">0</span><span style="font-size:0.65rem; color:#64748b;">Días acumulados en ruta</span></div>
+          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Gastos de Alojamiento</span><span id="trip-stat-expenses" style="font-size:1.1rem; font-weight:800; color:#10b981;">$0.00</span><span style="font-size:0.65rem; color:#64748b;">Alojamientos registrados</span></div>
         </div>
         <div class="grid grid-cols-2 gap-3 mb-3">
-          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Gastos Alojamiento</span><span id="trip-stat-expenses" style="font-size:1rem; font-weight:800; color:#ffb703;">$0.00</span></div>
-          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Prom. Días/Viaje</span><span id="trip-stat-avg-days" style="font-size:1rem; font-weight:800; color:#a855f7;">0 días</span></div>
+          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Total de Viajes</span><span id="trip-stat-count" style="font-size:1.1rem; font-weight:800; color:#fff;">0</span><span style="font-size:0.65rem; color:#64748b;">Itinerarios creados</span></div>
+          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Promedio por Viaje</span><span id="trip-stat-avg-days" style="font-size:1.1rem; font-weight:800; color:#ffb703;">0 días</span><span style="font-size:0.65rem; color:#64748b;">Duración promedio</span></div>
         </div>
-        <div class="dark-card"><div style="font-size:0.8rem; font-weight:700; color:#fff; margin-bottom:6px;">Destinos Recurrentes</div><ul id="trip-top-countries"></ul></div>
+        <div class="dark-card"><div style="font-size:0.8rem; font-weight:700; color:#fff; margin-bottom:6px;">Top 10 Destinos / Países</div><ul id="trip-top-countries"></ul></div>
       </div>
 
-      <!-- Panel Métricas Vuelos -->
       <div id="stats-panel-flights" style="display:none;">
         <div class="grid grid-cols-2 gap-3 mb-3">
           <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Boletería Total</span><span id="flight-stat-total-cost" style="font-size:1.1rem; font-weight:800; color:#10b981;">$0.00</span></div>
@@ -268,15 +226,10 @@
           <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Horas en Aire</span><span id="stat-hours" style="font-size:1rem; font-weight:800; color:#ffb703;">0 h</span></div>
           <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Millas Recorridas</span><span id="stat-miles" style="font-size:1rem; font-weight:800; color:#ec4899;">0 mi</span></div>
         </div>
-        <div class="grid grid-cols-2 gap-3 mb-3">
-          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Promedio / Vuelo</span><span id="flight-stat-avg-cost" style="font-size:1rem; font-weight:800; color:#38bdf8;">$0.00</span></div>
-          <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Tarifa vs Impuestos</span><span id="flight-stat-fare-taxes" style="font-size:0.8rem; font-weight:700; color:#cbd5e1;">$0 / $0</span></div>
-        </div>
         <div class="dark-card" style="height:200px; padding:10px;"><canvas id="airlinesChart"></canvas></div>
         <div class="dark-card"><div style="font-size:0.8rem; font-weight:700; color:#fff; margin-bottom:6px;">Gasto por Aerolínea</div><ul id="flight-top-airlines-spending"></ul></div>
       </div>
 
-      <!-- Panel Métricas Hoteles -->
       <div id="stats-panel-hotels" style="display:none;">
         <div class="grid grid-cols-2 gap-3 mb-3">
           <div class="dark-card" style="margin:0;"><span style="font-size:0.7rem; color:#94a3b8; display:block;">Noches Hospedadas</span><span id="hotel-stat-nights" style="font-size:1.1rem; font-weight:800; color:#10b981;">0</span></div>
@@ -286,9 +239,56 @@
         <div class="dark-card"><div style="font-size:0.8rem; font-weight:700; color:#fff; margin-bottom:6px;">Hoteles & Cadenas Preferidas</div><ul id="hotel-top-brands"></ul></div>
       </div>
     </div>
+  </section>
+
+  <!-- SECCIÓN 3: MAPA -->
+  <section id="screen-map-view" class="screen">
+    <div id="leafletMap"></div>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div class="dark-card" style="margin:0;">
+        <span style="font-size:0.7rem; color:#94a3b8; display:block;">Distancia Volada</span>
+        <span id="map-total-distance" style="font-size:1.1rem; font-weight:800; color:#0084ff;">0 mi</span>
+      </div>
+      <div class="dark-card" style="margin:0;">
+        <span style="font-size:0.7rem; color:#94a3b8; display:block;">Total Trayectos</span>
+        <span id="map-total-flights" style="font-size:1.1rem; font-weight:800; color:#10b981;">0</span>
+      </div>
+    </div>
+    <div class="dark-card">
+      <div style="font-size:0.8rem; font-weight:700; color:#fff; margin-bottom:6px;">Aeropuertos Frecuentes</div>
+      <ul id="map-top-airports"></ul>
+    </div>
+    <div class="dark-card">
+      <div style="font-size:0.8rem; font-weight:700; color:#fff; margin-bottom:6px;">Aerolíneas Utilizadas</div>
+      <ul id="map-top-airlines"></ul>
+    </div>
+  </section>
+
+  <!-- SECCIÓN 4: DOCUMENTOS -->
+  <section id="screen-documents" class="screen">
+    <div style="display:flex; gap:6px; overflow-x:auto; margin-bottom:14px; padding-bottom:4px;">
+      <button class="pill-btn doc-subtab active" onclick="switchDocSubtab('millas')">💳 Millas & Socios</button>
+      <button class="pill-btn doc-subtab" onclick="switchDocSubtab('aeropuertos')">🏢 Aeropuertos</button>
+      <button class="pill-btn doc-subtab" onclick="switchDocSubtab('equipaje')">🧳 Equipaje</button>
+    </div>
+
+    <!-- Subvista Millas -->
+    <div id="subview-doc-millas" class="doc-subview active">
+      <form onsubmit="saveMembershipProgram(event)" style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <input type="text" id="member-airline" placeholder="Programa (ej. Lifemiles)" required style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px; color:#fff; font-size:0.8rem;">
+          <input type="text" id="member-number" placeholder="Número de Socio" required style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px; color:#fff; font-size:0.8rem;">
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <input type="number" id="member-miles" placeholder="Millas / Puntos Acumulados" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px; color:#fff; font-size:0.8rem;">
+          <button type="submit" style="background:var(--primary); color:#fff; border:none; border-radius:8px; padding:8px; font-weight:700; font-size:0.8rem; cursor:pointer;">+ Guardar Programa</button>
+        </div>
+      </form>
+      <div id="memberships-list-container"></div>
+    </div>
 
     <!-- Subvista Aeropuertos -->
-    <div id="subview-aeropuertos" class="flight-subview" style="display:none;">
+    <div id="subview-doc-aeropuertos" class="doc-subview" style="display:none;">
       <div style="display:flex; gap:8px; margin-bottom:12px;">
         <input type="text" id="airport-search-input" placeholder="Código IATA (ej. MIA, EZE, SAL)..." style="flex:1; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:8px 12px; color:#fff; font-size:0.85rem;">
         <button onclick="searchAirportGuide()" style="background:var(--primary); color:#fff; border:none; border-radius:10px; padding:0 14px; font-weight:700; font-size:0.8rem; cursor:pointer;">Buscar</button>
@@ -297,7 +297,7 @@
     </div>
 
     <!-- Subvista Equipaje -->
-    <div id="subview-equipaje" class="flight-subview" style="display:none;">
+    <div id="subview-doc-equipaje" class="doc-subview" style="display:none;">
       <form onsubmit="addPackingItem(event)" style="display:flex; gap:8px; margin-bottom:12px;">
         <input type="text" id="packing-input" placeholder="Añadir artículo de equipaje..." style="flex:1; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:8px 12px; color:#fff; font-size:0.85rem;">
         <button type="submit" style="background:var(--primary); color:#fff; border:none; border-radius:10px; padding:0 14px; font-weight:700; font-size:0.8rem; cursor:pointer;">+ Agregar</button>
@@ -310,7 +310,7 @@
     </div>
   </section>
 
-  <!-- PANTALLA 4: CONFIGURACIÓN Y RESPALDOS -->
+  <!-- SECCIÓN 5: AJUSTES -->
   <section id="screen-settings" class="screen">
     <div class="dark-card">
       <div style="font-weight:700; color:#fff; font-size:0.95rem; margin-bottom:10px;"><i class="fa-solid fa-cloud text-blue-400 mr-2"></i>Respaldo en Google Drive</div>
@@ -340,28 +340,19 @@
     </div>
   </section>
 
-  <!-- PANTALLA 5: PLACEHOLDER PARA PESTAÑAS SECUNDARIAS -->
-  <section id="screen-placeholder" class="screen">
-    <div style="text-align:center; padding:40px 10px;">
-      <i class="fa-solid fa-compass text-blue-500" style="font-size:3rem; margin-bottom:12px;"></i>
-      <h2 id="placeholder-title" style="font-size:1.2rem; font-weight:800; color:#fff;">Sección</h2>
-      <p style="font-size:0.85rem; color:#94a3b8; margin-top:6px;">Esta función está activa dentro de la experiencia máster de itinerarios.</p>
-    </div>
-  </section>
-
   <!-- BOTÓN FLOTANTE (FAB) -->
   <button class="fab-btn" onclick="handleFabClick()"><i class="fa-solid fa-plus"></i></button>
 
-  <!-- NAVEGACIÓN INFERIOR -->
+  <!-- BARRA DE NAVEGACIÓN INFERIOR (ESTRUCTURA SOLICITADA) -->
   <nav class="bottom-nav">
-    <button class="nav-item active" onclick="switchTab('trips-list')"><i class="fa-solid fa-suitcase"></i><span>Viajes</span></button>
-    <button class="nav-item" onclick="switchTab('flight-stats')"><i class="fa-solid fa-chart-pie"></i><span>Flight Hub</span></button>
-    <button class="nav-item" onclick="switchTab('placeholder', 'Explorar & Mapas')"><i class="fa-solid fa-map-location-dot"></i><span>Mapa</span></button>
-    <button class="nav-item" onclick="switchTab('placeholder', 'Documentos')"><i class="fa-solid fa-passport"></i><span>Documentos</span></button>
-    <button class="nav-item" onclick="switchTab('settings')"><i class="fa-solid fa-sliders"></i><span>Ajustes</span></button>
+    <button class="nav-item active" onclick="switchMainTab('trips-list')"><i class="fa-solid fa-suitcase"></i><span>Viajes</span></button>
+    <button class="nav-item" onclick="switchMainTab('flight-hub')"><i class="fa-solid fa-chart-pie"></i><span>Flight Hub</span></button>
+    <button class="nav-item" onclick="switchMainTab('map-view')"><i class="fa-solid fa-map-location-dot"></i><span>Mapa</span></button>
+    <button class="nav-item" onclick="switchMainTab('documents')"><i class="fa-solid fa-passport"></i><span>Documentos</span></button>
+    <button class="nav-item" onclick="switchMainTab('settings')"><i class="fa-solid fa-sliders"></i><span>Ajustes</span></button>
   </nav>
 
-  <!-- MODAL: AGREGAR ITEM AL ITINERARIO -->
+  <!-- MODALES DE EDICIÓN Y FORMULARIOS -->
   <div id="modal-add-item" class="modal-overlay">
     <div class="modal-content">
       <div style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:14px;">Añadir al Itinerario</div>
@@ -376,7 +367,6 @@
     </div>
   </div>
 
-  <!-- MODAL FORMULARIO VUELO -->
   <div id="modal-flight-form" class="modal-overlay">
     <div class="modal-content">
       <div id="flight-form-modal-title" style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:12px;">✈ Registrar Vuelo</div>
@@ -395,20 +385,16 @@
           <div><label style="font-size:0.65rem; color:#94a3b8;">Llegada</label><input type="datetime-local" id="flight-arr-time" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
-          <input type="text" id="flight-gate" placeholder="Puerta / Gate" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;">
+          <input type="text" id="flight-gate" placeholder="Gate" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;">
           <input type="text" id="flight-seat" placeholder="Asiento" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;">
-          <input type="text" id="flight-code" placeholder="Reserva PNR" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;">
+          <input type="text" id="flight-code" placeholder="PNR" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;">
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
           <input type="number" step="0.01" id="flight-total-cost" placeholder="Costo Total" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-          <input type="number" step="0.01" id="flight-fare-cost" placeholder="Tarifa Base (Fare)" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
+          <input type="number" step="0.01" id="flight-fare-cost" placeholder="Tarifa Base" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <select id="flight-currency" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-            <option value="USD">USD ($)</option>
-            <option value="EUR">EUR (€)</option>
-            <option value="MXN">MXN ($)</option>
-          </select>
+          <select id="flight-currency" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;"><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option></select>
           <select id="flight-payment-method" class="payment-selector-dropdown" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;"></select>
         </div>
         <button type="submit" style="background:var(--primary); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; margin-top:6px; cursor:pointer;">Guardar Vuelo</button>
@@ -417,100 +403,28 @@
     </div>
   </div>
 
-  <!-- MODAL FORMULARIO HOTEL -->
   <div id="modal-hotel-form" class="modal-overlay">
     <div class="modal-content">
       <div id="hotel-form-modal-title" style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:12px;">🏨 Registrar Hotel</div>
       <form onsubmit="saveAdvancedHotel(event)" style="display:flex; flex-direction:column; gap:10px;">
         <input type="hidden" id="edit-hotel-item-id">
-        <input type="text" id="hotel-name" placeholder="Nombre del Alojamiento / Hotel" required style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
+        <input type="text" id="hotel-name" placeholder="Alojamiento / Hotel" required style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
           <div><label style="font-size:0.65rem; color:#94a3b8;">Check-in</label><input type="datetime-local" id="hotel-checkin" required style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
           <div><label style="font-size:0.65rem; color:#94a3b8;">Check-out</label><input type="datetime-local" id="hotel-checkout" required style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <input type="number" step="0.01" id="hotel-cost" placeholder="Costo Total Estadía" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-          <select id="hotel-currency" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-            <option value="USD">USD ($)</option><option value="EUR">EUR (€)</option><option value="MXN">MXN ($)</option>
-          </select>
+          <input type="number" step="0.01" id="hotel-cost" placeholder="Costo Total" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
+          <select id="hotel-currency" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;"><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option></select>
         </div>
         <select id="hotel-payment-method" class="payment-selector-dropdown" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;"></select>
-        <input type="text" id="hotel-address" placeholder="Dirección del Alojamiento" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
+        <input type="text" id="hotel-address" placeholder="Dirección" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
         <button type="submit" style="background:#10b981; color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; margin-top:6px; cursor:pointer;">Guardar Hotel</button>
         <button type="button" onclick="closeModals()" style="background:none; border:none; color:#94a3b8; font-size:0.8rem; cursor:pointer;">Cancelar</button>
       </form>
     </div>
   </div>
 
-  <!-- MODAL FORMULARIO AUTO -->
-  <div id="modal-car-form" class="modal-overlay">
-    <div class="modal-content">
-      <div id="car-form-modal-title" style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:12px;">🚗 Alquiler de Vehículo</div>
-      <form onsubmit="saveAdvancedCar(event)" style="display:flex; flex-direction:column; gap:10px;">
-        <input type="hidden" id="edit-car-item-id">
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <input type="text" id="car-company" placeholder="Empresa (Hertz, Avis...)" required style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-          <input type="text" id="car-model" placeholder="Categoría / Modelo" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <div><label style="font-size:0.65rem; color:#94a3b8;">Retiro</label><input type="datetime-local" id="car-pickup" required style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
-          <div><label style="font-size:0.65rem; color:#94a3b8;">Devolución</label><input type="datetime-local" id="car-dropoff" required style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <input type="number" step="0.01" id="car-cost" placeholder="Costo Alquiler" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-          <select id="car-currency" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;"><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option></select>
-        </div>
-        <select id="car-payment-method" class="payment-selector-dropdown" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;"></select>
-        <input type="text" id="car-location" placeholder="Oficina / Ubicación de retiro" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        <input type="text" id="car-code" placeholder="Código Reserva" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        <button type="submit" style="background:#f59e0b; color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; margin-top:6px; cursor:pointer;">Guardar Alquiler</button>
-        <button type="button" onclick="closeModals()" style="background:none; border:none; color:#94a3b8; font-size:0.8rem; cursor:pointer;">Cancelar</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL FORMULARIO RESTAURANTE -->
-  <div id="modal-restaurant-form" class="modal-overlay">
-    <div class="modal-content">
-      <div id="restaurant-form-modal-title" style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:12px;">🍽 Reserva / Gastronomía</div>
-      <form onsubmit="saveAdvancedRestaurant(event)" style="display:flex; flex-direction:column; gap:10px;">
-        <input type="hidden" id="edit-restaurant-item-id">
-        <input type="text" id="restaurant-name" placeholder="Nombre del Restaurante / Lugar" required style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <div><label style="font-size:0.65rem; color:#94a3b8;">Fecha & Hora</label><input type="datetime-local" id="restaurant-time" required style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
-          <div><label style="font-size:0.65rem; color:#94a3b8;">Comensales</label><input type="text" id="restaurant-people" placeholder="Ej. 2 Personas" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <input type="number" step="0.01" id="restaurant-cost" placeholder="Gasto Estimado" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-          <select id="restaurant-currency" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;"><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option></select>
-        </div>
-        <select id="restaurant-payment-method" class="payment-selector-dropdown" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;"></select>
-        <input type="text" id="restaurant-address" placeholder="Dirección / Lugar" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        <input type="text" id="restaurant-notes" placeholder="Notas / Confirmación" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        <button type="submit" style="background:#ec4899; color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; margin-top:6px; cursor:pointer;">Guardar Gastronomía</button>
-        <button type="button" onclick="closeModals()" style="background:none; border:none; color:#94a3b8; font-size:0.8rem; cursor:pointer;">Cancelar</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL FORMULARIO GENÉRICO -->
-  <div id="modal-generic-form" class="modal-overlay">
-    <div class="modal-content">
-      <div id="generic-form-title" style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:12px;">Actividad</div>
-      <form onsubmit="saveGenericItem(event)" style="display:flex; flex-direction:column; gap:10px;">
-        <input type="hidden" id="generic-edit-item-id">
-        <input type="hidden" id="generic-item-type">
-        <input type="text" id="generic-title" placeholder="Título de la Actividad" required style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        <div><label style="font-size:0.65rem; color:#94a3b8;">Fecha & Hora</label><input type="datetime-local" id="generic-time" required style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
-        <input type="text" id="generic-sub" placeholder="Subtítulo / Detalles corta" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        <select id="generic-payment-method" class="payment-selector-dropdown" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;"></select>
-        <button type="submit" style="background:var(--primary); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; margin-top:6px; cursor:pointer;">Guardar Elemento</button>
-        <button type="button" onclick="closeModals()" style="background:none; border:none; color:#94a3b8; font-size:0.8rem; cursor:pointer;">Cancelar</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL: DETALLES Y OPCIONES DE ITEM -->
   <div id="modal-item-details" class="modal-overlay">
     <div class="modal-content">
       <div id="item-detail-body"></div>
@@ -522,92 +436,58 @@
     </div>
   </div>
 
-  <!-- MODAL: NUEVO / EDITAR VIAJE -->
   <div id="modal-new-trip" class="modal-overlay">
     <div class="modal-content">
       <div id="modal-trip-title" style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:12px;">Crear Nuevo Viaje</div>
       <form onsubmit="saveTripForm(event)" style="display:flex; flex-direction:column; gap:10px;">
         <input type="hidden" id="edit-trip-id">
-        <input type="text" id="trip-name-input" placeholder="Nombre del Viaje (Ej: Ecuador 2026)" required style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
+        <input type="text" id="trip-name-input" placeholder="Nombre del Viaje" required style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
         <input type="text" id="trip-dest-input" placeholder="Destino Principal" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <div><label style="font-size:0.65rem; color:#94a3b8;">Fecha Inicio</label><input type="date" id="trip-start-input" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
-          <div><label style="font-size:0.65rem; color:#94a3b8;">Fecha Fin</label><input type="date" id="trip-end-input" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
+          <div><label style="font-size:0.65rem; color:#94a3b8;">Inicio</label><input type="date" id="trip-start-input" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
+          <div><label style="font-size:0.65rem; color:#94a3b8;">Fin</label><input type="date" id="trip-end-input" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:6px; border-radius:8px; color:#fff; font-size:0.75rem;"></div>
         </div>
-        <div>
-          <label style="font-size:0.65rem; color:#94a3b8;">Imagen de Portada (URL o Subir archivo)</label>
-          <input type="text" id="trip-image-url" placeholder="https://..." onchange="updateImagePreview(this.value)" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem; margin-bottom:6px;">
-          <input type="file" id="trip-image-file" accept="image/*" onchange="handleTripImageUpload(event)" style="font-size:0.75rem; color:#94a3b8;">
-        </div>
-        <div id="trip-image-preview-box" style="display:none; text-align:center;"><img id="trip-image-preview" style="max-height:100px; border-radius:8px; margin:0 auto;"></div>
+        <input type="text" id="trip-image-url" placeholder="Imagen URL (https://...)" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
         <button type="submit" style="background:var(--primary); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; margin-top:6px; cursor:pointer;">Guardar Viaje</button>
         <button type="button" onclick="closeModals()" style="background:none; border:none; color:#94a3b8; font-size:0.8rem; cursor:pointer;">Cancelar</button>
       </form>
     </div>
   </div>
 
-  <!-- MODAL: CONFIRMAR ELIMINAR VIAJE -->
-  <div id="modal-confirm-delete" class="modal-overlay">
-    <div class="modal-content" style="text-align:center;">
-      <i class="fa-solid fa-triangle-exclamation text-red-500" style="font-size:2.5rem; margin-bottom:10px;"></i>
-      <div style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:6px;">¿Eliminar este viaje?</div>
-      <p id="delete-trip-msg" style="font-size:0.8rem; color:#94a3b8; margin-bottom:16px;"></p>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <button onclick="confirmDeleteTrip()" style="background:#ef4444; color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; cursor:pointer;">Sí, Eliminar</button>
-        <button onclick="closeModals()" style="background:#1e293b; color:#fff; border:1px solid rgba(255,255,255,0.1); padding:10px; border-radius:10px; font-weight:700; cursor:pointer;">Cancelar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: IMPORTAR APP IN THE AIR -->
   <div id="modal-import-ait" class="modal-overlay">
     <div class="modal-content">
       <div style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:6px;">✈ Importar desde App in the Air</div>
-      <p style="font-size:0.75rem; color:#94a3b8; margin-bottom:12px;">Sube tu archivo de respaldo de App in the Air o pega el texto directamente.</p>
-      <input type="file" accept=".txt,.json" onchange="handleAitFileUpload(event)" style="font-size:0.75rem; color:#94a3b8; margin-bottom:10px;">
-      <textarea id="ait-text-input" placeholder="Pega aquí el texto extraído..." rows="6" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px; color:#fff; font-size:0.75rem; font-family:monospace; margin-bottom:10px;"></textarea>
-      <button onclick="processAitImportText()" style="width:100%; background:#ffb703; color:#0f172a; border:none; padding:10px; border-radius:10px; font-weight:800; cursor:pointer; margin-bottom:6px;">Procesar & Importar</button>
+      <textarea id="ait-text-input" placeholder="Pega el texto del respaldo..." rows="6" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px; color:#fff; font-size:0.75rem; margin-bottom:10px;"></textarea>
+      <button onclick="processAitImportText()" style="width:100%; background:#ffb703; color:#0f172a; border:none; padding:10px; border-radius:10px; font-weight:800; cursor:pointer; margin-bottom:6px;">Procesar e Importar</button>
       <button onclick="closeModals()" style="width:100%; background:none; border:none; color:#94a3b8; font-size:0.8rem; cursor:pointer;">Cancelar</button>
     </div>
   </div>
 
-  <!-- MODAL: FUSIONAR VIAJES -->
   <div id="modal-merge-trips" class="modal-overlay">
     <div class="modal-content">
-      <div style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:6px;">🔀 Consolidar y Unir Viajes</div>
-      <p style="font-size:0.75rem; color:#94a3b8; margin-bottom:12px;">Selecciona 2 o más viajes para unirlos en una sola aventura ordenada por fecha.</p>
-      <input type="text" id="merged-trip-name" placeholder="Nombre del nuevo viaje consolidado" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem; margin-bottom:10px;">
-      <div id="merge-trips-list" style="max-height:200px; overflow-y:auto; margin-bottom:14px; display:flex; flex-direction:column; gap:6px;"></div>
-      <button onclick="executeTripMerge()" style="width:100%; background:#38bdf8; color:#0f172a; border:none; padding:10px; border-radius:10px; font-weight:800; cursor:pointer; margin-bottom:6px;">Unir Viajes Seleccionados</button>
+      <div style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:6px;">🔀 Consolidar Viajes</div>
+      <input type="text" id="merged-trip-name" placeholder="Nombre del viaje consolidado" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem; margin-bottom:10px;">
+      <div id="merge-trips-list" style="max-height:200px; overflow-y:auto; margin-bottom:14px;"></div>
+      <button onclick="executeTripMerge()" style="width:100%; background:#38bdf8; color:#0f172a; border:none; padding:10px; border-radius:10px; font-weight:800; cursor:pointer; margin-bottom:6px;">Unir Viajes</button>
       <button onclick="closeModals()" style="width:100%; background:none; border:none; color:#94a3b8; font-size:0.8rem; cursor:pointer;">Cancelar</button>
     </div>
   </div>
 
-  <!-- MODAL: AÑADIR MÉTODO DE PAGO -->
   <div id="modal-add-payment" class="modal-overlay">
     <div class="modal-content">
-      <div style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:12px;">💳 Agregar Método de Pago</div>
+      <div style="font-weight:800; color:#fff; font-size:1.1rem; margin-bottom:12px;">💳 Método de Pago</div>
       <form onsubmit="saveNewPaymentMethod(event)" style="display:flex; flex-direction:column; gap:10px;">
-        <select id="pay-type-select" onchange="togglePaymentInputs(this.value)" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-          <option value="Visa">Visa</option>
-          <option value="MasterCard">MasterCard</option>
-          <option value="American Express">American Express</option>
-          <option value="Discover">Discover</option>
-          <option value="Efectivo">Efectivo</option>
-          <option value="Transferencia / Bancaria">Transferencia Bancaria</option>
+        <select id="pay-type-select" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
+          <option value="Visa">Visa</option><option value="MasterCard">MasterCard</option><option value="Efectivo">Efectivo</option>
         </select>
-        <input type="text" id="pay-name-input" placeholder="Nombre (ej. Visa BAC, Cash)" required style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        <div id="group-pay-last4">
-          <input type="text" id="pay-last4-input" maxlength="4" placeholder="Últimos 4 dígitos (opcional)" style="width:100%; background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
-        </div>
-        <button type="submit" style="background:var(--primary); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; margin-top:6px; cursor:pointer;">Guardar Método de Pago</button>
+        <input type="text" id="pay-name-input" placeholder="Nombre (ej. Visa BAC)" required style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
+        <input type="text" id="pay-last4-input" maxlength="4" placeholder="Últimos 4 dígitos" style="background:#0a192f; border:1px solid rgba(255,255,255,0.1); padding:8px; border-radius:8px; color:#fff; font-size:0.8rem;">
+        <button type="submit" style="background:var(--primary); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; cursor:pointer;">Guardar</button>
         <button type="button" onclick="closeModals()" style="background:none; border:none; color:#94a3b8; font-size:0.8rem; cursor:pointer;">Cancelar</button>
       </form>
     </div>
   </div>
 
-  <!-- Carga del Motor Lógico Principal -->
   <script src="./app.js"></script>
-
 </body>
 </html>
