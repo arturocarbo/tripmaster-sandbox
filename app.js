@@ -12,6 +12,7 @@ let currentTripTimeFilter = 'all';
 let currentFlightTimeFilter = 'all';
 
 let activeSelectedItemId = null;
+let tempTripImageBase64 = '';
 
 const GOOGLE_CLIENT_ID = '3946661722-akjk1dp0slafuu03bdc3hehibbe952og.apps.googleusercontent.com';
 let tokenClient = null;
@@ -232,10 +233,47 @@ function handleFabClick() {
 }
 
 // ==========================================
-// FUNCIONES DE GESTIÓN, EDICIÓN Y BORRADO DE VIAJES
+// FUNCIONES DE FOTO LOCAL, GESTIÓN Y EDICIÓN DE VIAJES
 // ==========================================
+function previewTripImageFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    tempTripImageBase64 = e.target.result;
+    const imgPreview = document.getElementById('trip-image-preview');
+    const container = document.getElementById('trip-image-preview-container');
+    if (imgPreview && container) {
+      imgPreview.src = tempTripImageBase64;
+      container.style.display = 'block';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function openModalNewTrip() {
+  closeModals();
+  tempTripImageBase64 = '';
+  document.getElementById('edit-trip-id').value = '';
+  document.getElementById('modal-trip-title').innerText = 'Crear Nuevo Viaje';
+  document.getElementById('trip-name-input').value = '';
+  document.getElementById('trip-dest-input').value = '';
+  document.getElementById('trip-start-input').value = '';
+  document.getElementById('trip-end-input').value = '';
+  document.getElementById('trip-image-url').value = '';
+  
+  const fileInput = document.getElementById('trip-image-file');
+  if (fileInput) fileInput.value = '';
+  const prevContainer = document.getElementById('trip-image-preview-container');
+  if (prevContainer) prevContainer.style.display = 'none';
+
+  document.getElementById('modal-new-trip').classList.add('active');
+}
+
 function editCurrentTrip() {
   closeModals();
+  tempTripImageBase64 = '';
   const trip = trips.find(t => t.id === activeTripId);
   if (!trip) return;
   
@@ -245,7 +283,9 @@ function editCurrentTrip() {
   const startInput = document.getElementById('trip-start-input');
   const endInput = document.getElementById('trip-end-input');
   const imgUrlInput = document.getElementById('trip-image-url');
+  const fileInput = document.getElementById('trip-image-file');
   
+  if (fileInput) fileInput.value = '';
   if (editIdInput) editIdInput.value = trip.id;
   if (titleInput) titleInput.value = trip.title;
   if (destInput) destInput.value = trip.title;
@@ -256,7 +296,16 @@ function editCurrentTrip() {
     if (endInput) endInput.value = parts[1].trim();
   }
   
-  if (imgUrlInput) imgUrlInput.value = trip.image || '';
+  if (imgUrlInput) imgUrlInput.value = trip.image?.startsWith('data:image') ? '' : (trip.image || '');
+  
+  const imgPreview = document.getElementById('trip-image-preview');
+  const container = document.getElementById('trip-image-preview-container');
+  if (trip.image && imgPreview && container) {
+    imgPreview.src = trip.image;
+    container.style.display = 'block';
+  } else if (container) {
+    container.style.display = 'none';
+  }
   
   const modalTitle = document.getElementById('modal-trip-title');
   if (modalTitle) modalTitle.innerText = 'Editar Viaje';
@@ -264,17 +313,55 @@ function editCurrentTrip() {
   document.getElementById('modal-new-trip')?.classList.add('active');
 }
 
+function saveTripForm(e) {
+  e.preventDefault();
+  const editId = document.getElementById('edit-trip-id').value;
+  const name = document.getElementById('trip-name-input').value;
+  const start = document.getElementById('trip-start-input').value;
+  const end = document.getElementById('trip-end-input').value;
+  const imageUrlInput = document.getElementById('trip-image-url').value.trim();
+  const defaultImg = 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=200&q=80';
+
+  let finalImage = tempTripImageBase64 || imageUrlInput;
+
+  if (editId) {
+    const trip = trips.find(t => t.id === editId);
+    if (trip) {
+      trip.title = name;
+      if (start && end) trip.dates = `${start} – ${end}`;
+      if (finalImage) {
+        trip.image = finalImage;
+      }
+      saveDataToStorage();
+      renderTimeline();
+      renderTrips();
+    }
+  } else {
+    const newTrip = {
+      id: Date.now().toString(),
+      title: name,
+      dates: start && end ? `${start} – ${end}` : 'En definición',
+      daysCount: 'Próximamente',
+      daysToGo: 'en agenda',
+      image: finalImage || defaultImg,
+      items: []
+    };
+    trips.unshift(newTrip);
+    saveDataToStorage();
+    renderTrips();
+  }
+  
+  tempTripImageBase64 = '';
+  closeModals();
+}
+
 function askDeleteCurrentTrip() {
   closeModals();
   const trip = trips.find(t => t.id === activeTripId);
   if (!trip) return;
-  
-  const msgEl = document.getElementById('delete-trip-msg');
-  if (msgEl) {
-    msgEl.innerText = `Se eliminará de forma permanente el viaje "${trip.title}" y todos sus itinerarios registrados.`;
+  if (confirm(`¿Deseas eliminar el viaje "${trip.title}" y todo su itinerario?`)) {
+    confirmDeleteTrip();
   }
-  
-  document.getElementById('modal-confirm-delete')?.classList.add('active');
 }
 
 function confirmDeleteTrip() {
@@ -302,11 +389,6 @@ function shareActiveTrip() {
     navigator.clipboard.writeText(`${shareData.text} - ${shareData.url}`);
     alert('✔ Enlace del viaje copiado al portapapeles.');
   }
-}
-
-function exportCalendar() {
-  closeModals();
-  alert('📅 Sincronización iniciada: El archivo de calendario ha sido preparado.');
 }
 
 // ==========================================
@@ -1213,54 +1295,6 @@ function saveAdvancedFlight(e) {
 
   closeModals();
   e.target.reset();
-}
-
-function openModalNewTrip() {
-  closeModals();
-  document.getElementById('edit-trip-id').value = '';
-  document.getElementById('modal-trip-title').innerText = 'Crear Nuevo Viaje';
-  document.getElementById('trip-name-input').value = '';
-  document.getElementById('trip-dest-input').value = '';
-  document.getElementById('trip-start-input').value = '';
-  document.getElementById('trip-end-input').value = '';
-  document.getElementById('trip-image-url').value = '';
-  document.getElementById('modal-new-trip').classList.add('active');
-}
-
-function saveTripForm(e) {
-  e.preventDefault();
-  const editId = document.getElementById('edit-trip-id').value;
-  const name = document.getElementById('trip-name-input').value;
-  const start = document.getElementById('trip-start-input').value;
-  const end = document.getElementById('trip-end-input').value;
-  const imageUrl = document.getElementById('trip-image-url').value.trim();
-  const defaultImg = 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=200&q=80';
-
-  if (editId) {
-    const trip = trips.find(t => t.id === editId);
-    if (trip) {
-      trip.title = name;
-      if (start && end) trip.dates = `${start} – ${end}`;
-      if (imageUrl) trip.image = imageUrl;
-      saveDataToStorage();
-      renderTimeline();
-      renderTrips();
-    }
-  } else {
-    const newTrip = {
-      id: Date.now().toString(),
-      title: name,
-      dates: start && end ? `${start} – ${end}` : 'En definición',
-      daysCount: 'Próximamente',
-      daysToGo: 'en agenda',
-      image: imageUrl || defaultImg,
-      items: []
-    };
-    trips.unshift(newTrip);
-    saveDataToStorage();
-    renderTrips();
-  }
-  closeModals();
 }
 
 // ==========================================
