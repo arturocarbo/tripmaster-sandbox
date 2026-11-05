@@ -1,3 +1,7 @@
+// ==========================================
+// APP.JS - LÓGICA PRINCIPAL Y MODALES
+// ==========================================
+
 let tripsData = JSON.parse(localStorage.getItem('tripmaster_trips')) || [];
 let paymentMethods = JSON.parse(localStorage.getItem('tripmaster_payments')) || [];
 let packingList = JSON.parse(localStorage.getItem('tripmaster_packing')) || [];
@@ -5,7 +9,6 @@ let packingList = JSON.parse(localStorage.getItem('tripmaster_packing')) || [];
 let activeTripId = null;
 let activeItemId = null;
 let tripTimeFilter = 'all';
-let flightTimeFilter = 'all';
 
 document.addEventListener('DOMContentLoaded', () => {
   renderTripsList();
@@ -19,7 +22,7 @@ function saveToLocalStorage() {
   localStorage.setItem('tripmaster_trips', JSON.stringify(tripsData));
   localStorage.setItem('tripmaster_payments', JSON.stringify(paymentMethods));
   localStorage.setItem('tripmaster_packing', JSON.stringify(packingList));
-  populateYearSelects();
+  if (typeof populateYearSelects === 'function') populateYearSelects();
 }
 
 function showScreen(screenId) {
@@ -33,17 +36,24 @@ function switchTab(tabId, titleText = '') {
   
   if (tabId === 'trips-list') {
     showScreen('trips-list');
-    document.querySelectorAll('.nav-item')[0].classList.add('active');
+    const navBtn = document.querySelectorAll('.nav-item')[0];
+    if (navBtn) navBtn.classList.add('active');
+    renderTripsList();
   } else if (tabId === 'flight-stats') {
     showScreen('flight-stats');
-    document.querySelectorAll('.nav-item')[2].classList.add('active');
-    initOrUpdateLeafletMap();
+    const navBtn = document.querySelectorAll('.nav-item')[2];
+    if (navBtn) navBtn.classList.add('active');
+    if (typeof initOrUpdateLeafletMap === 'function') {
+      setTimeout(() => initOrUpdateLeafletMap(), 200);
+    }
   } else if (tabId === 'account') {
     showScreen('account');
-    document.querySelectorAll('.nav-item')[4].classList.add('active');
+    const navBtn = document.querySelectorAll('.nav-item')[4];
+    if (navBtn) navBtn.classList.add('active');
   } else if (tabId === 'placeholder') {
     showScreen('placeholder');
-    document.getElementById('placeholder-title').textContent = titleText;
+    const titleEl = document.getElementById('placeholder-title');
+    if (titleEl) titleEl.textContent = titleText;
   }
 }
 
@@ -51,17 +61,25 @@ function switchFlightTab(subviewId) {
   document.querySelectorAll('.flight-tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.flight-subview').forEach(v => v.classList.remove('active'));
 
-  event.currentTarget.classList.add('active');
-  document.getElementById(`subview-${subviewId}`).classList.add('active');
+  if (event && event.currentTarget) {
+    event.currentTarget.classList.add('active');
+  }
+  const targetSubview = document.getElementById(`subview-${subviewId}`);
+  if (targetSubview) targetSubview.classList.add('active');
 
-  if (subviewId === 'mapa') initOrUpdateLeafletMap();
+  if (subviewId === 'mapa' && typeof initOrUpdateLeafletMap === 'function') {
+    setTimeout(() => initOrUpdateLeafletMap(), 200);
+  }
   if (subviewId === 'vuelos') renderAirFlightsList();
-  if (subviewId === 'stats') renderSelectedCategoryStats();
+  if (subviewId === 'stats' && typeof renderSelectedCategoryStats === 'function') {
+    renderSelectedCategoryStats();
+  }
 }
 
 function toggleDropdown(event, dropdownId) {
   event.stopPropagation();
   const dropdown = document.getElementById(dropdownId);
+  if (!dropdown) return;
   const isVisible = dropdown.classList.contains('active');
   closeModals();
   if (!isVisible) dropdown.classList.add('active');
@@ -80,26 +98,33 @@ window.addEventListener('click', (e) => {
 
 function renderTripsList() {
   const container = document.getElementById('trips-container');
-  const search = document.getElementById('trip-search-input')?.value.toLowerCase() || '';
-  const yearSelect = document.getElementById('trip-year-select')?.value || 'all';
+  if (!container) return;
+
+  const searchInput = document.getElementById('trip-search-input');
+  const search = searchInput ? searchInput.value.toLowerCase() : '';
+  
+  const yearSelect = document.getElementById('trip-year-select');
+  const yearVal = yearSelect ? yearSelect.value : 'all';
 
   container.innerHTML = '';
   const now = new Date();
 
   const filtered = tripsData.filter(trip => {
-    const matchesSearch = trip.name.toLowerCase().includes(search) || trip.destination.toLowerCase().includes(search);
+    const matchesSearch = (trip.name || '').toLowerCase().includes(search) || 
+                          (trip.destination || '').toLowerCase().includes(search);
+    
     const tripYear = trip.startDate ? new Date(trip.startDate).getFullYear().toString() : '';
-    const matchesYear = (yearSelect === 'all' || tripYear === yearSelect);
+    const matchesYear = (yearVal === 'all' || tripYear === yearVal);
 
     let matchesTime = true;
-    if (tripTimeFilter === 'upcoming') matchesTime = new Date(trip.endDate) >= now;
-    if (tripTimeFilter === 'past') matchesTime = new Date(trip.endDate) < now;
+    if (tripTimeFilter === 'upcoming' && trip.endDate) matchesTime = new Date(trip.endDate) >= now;
+    if (tripTimeFilter === 'past' && trip.endDate) matchesTime = new Date(trip.endDate) < now;
 
     return matchesSearch && matchesYear && matchesTime;
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px;">No se encontraron viajes.</div>';
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:0.85rem;">No se encontraron viajes. Toca + para crear uno nuevo.</div>';
     return;
   }
 
@@ -108,21 +133,26 @@ function renderTripsList() {
     card.className = 'trip-card';
     card.onclick = () => openTripDetail(trip.id);
     card.innerHTML = `
-      <img src="${trip.image || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828'}" class="trip-card-img">
+      <img src="${trip.image || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828'}" class="trip-card-img" alt="Portada">
       <div class="trip-card-info">
         <div class="trip-card-title">${trip.name}</div>
-        <div class="trip-card-dates">${trip.startDate} – ${trip.endDate}</div>
-        <div class="trip-card-badge">${trip.destination}</div>
+        <div class="trip-card-dates">${trip.startDate || 'Sin fecha'} – ${trip.endDate || 'Sin fecha'}</div>
+        <div class="trip-card-badge">${trip.destination || 'Destino'}</div>
       </div>
     `;
     container.appendChild(card);
   });
 }
 
+function filterTripsList() {
+  renderTripsList();
+}
+
 function setTripTimeFilter(type) {
   tripTimeFilter = type;
   document.querySelectorAll('#screen-trips-list .pill-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(`pill-trip-${type}`).classList.add('active');
+  const activeBtn = document.getElementById(`pill-trip-${type}`);
+  if (activeBtn) activeBtn.classList.add('active');
   renderTripsList();
 }
 
@@ -131,14 +161,18 @@ function openTripDetail(tripId) {
   const trip = tripsData.find(t => t.id === tripId);
   if (!trip) return;
 
-  document.getElementById('detail-title').textContent = trip.name;
-  document.getElementById('detail-dates').textContent = `${trip.startDate} – ${trip.endDate}`;
+  const titleEl = document.getElementById('detail-title');
+  const datesEl = document.getElementById('detail-dates');
+  const costEl = document.getElementById('detail-total-cost');
+
+  if (titleEl) titleEl.textContent = trip.name;
+  if (datesEl) datesEl.textContent = `${trip.startDate || ''} – ${trip.endDate || ''}`;
 
   let totalCost = 0;
   if (trip.items) {
     trip.items.forEach(i => { if (i.cost) totalCost += parseFloat(i.cost); });
   }
-  document.getElementById('detail-total-cost').textContent = '$' + totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' USD';
+  if (costEl) costEl.textContent = '$' + totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' USD';
 
   renderTimeline(trip);
   showScreen('trip-detail');
@@ -146,10 +180,11 @@ function openTripDetail(tripId) {
 
 function renderTimeline(trip) {
   const container = document.getElementById('timeline-container');
+  if (!container) return;
   container.innerHTML = '';
 
   if (!trip.items || trip.items.length === 0) {
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">Sin actividades registradas. Toca + para agregar.</div>';
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:0.85rem;">Sin actividades registradas. Toca el botón + para agregar vuelos, hoteles o actividades.</div>';
     return;
   }
 
@@ -177,7 +212,7 @@ function renderTimeline(trip) {
       </div>
       <div class="content-card">
         <div class="card-title-row">
-          <div class="card-title">${item.title}</div>
+          <div class="card-title">${item.title || 'Evento'}</div>
           ${item.cost ? `<div class="card-status">$${item.cost}</div>` : ''}
         </div>
         <div class="card-subdetail">${item.subtitle || ''}</div>
@@ -195,6 +230,9 @@ function openModalNewTrip() {
   document.getElementById('trip-start-input').value = '';
   document.getElementById('trip-end-input').value = '';
   document.getElementById('trip-image-url').value = '';
+  const prevBox = document.getElementById('trip-image-preview-box');
+  if (prevBox) prevBox.style.display = 'none';
+  
   document.getElementById('modal-new-trip').classList.add('active');
 }
 
@@ -209,12 +247,20 @@ function saveTripForm(e) {
 
   const existingIndex = tripsData.findIndex(t => t.id === id);
   const tripObj = {
-    id, name, destination: dest, startDate: start, endDate: end, image: img,
-    items: existingIndex >= 0 ? tripsData[existingIndex].items : []
+    id: id,
+    name: name,
+    destination: dest,
+    startDate: start,
+    endDate: end,
+    image: img || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828',
+    items: existingIndex >= 0 ? (tripsData[existingIndex].items || []) : []
   };
 
-  if (existingIndex >= 0) tripsData[existingIndex] = tripObj;
-  else tripsData.push(tripObj);
+  if (existingIndex >= 0) {
+    tripsData[existingIndex] = tripObj;
+  } else {
+    tripsData.push(tripObj);
+  }
 
   saveToLocalStorage();
   closeModals();
@@ -255,7 +301,7 @@ function renderAirFlightsList() {
   const flights = getAllAirFlights();
 
   if (flights.length === 0) {
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px;">No hay vuelos registrados en tus itinerarios.</div>';
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:30px; font-size:0.85rem;">No hay vuelos registrados en tus itinerarios.</div>';
     return;
   }
 
@@ -346,7 +392,7 @@ function renderPackingList() {
 function addPackingItem(e) {
   e.preventDefault();
   const input = document.getElementById('packing-input');
-  if (!input.value.trim()) return;
+  if (!input || !input.value.trim()) return;
   packingList.push({ name: input.value.trim(), done: false });
   input.value = '';
   saveToLocalStorage();
@@ -410,7 +456,8 @@ function checkServiceWorkerUpdates() {
         const newWorker = reg.installing;
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            document.getElementById('update-toast').style.display = 'flex';
+            const updateToast = document.getElementById('update-toast');
+            if (updateToast) updateToast.style.display = 'flex';
           }
         });
       });
