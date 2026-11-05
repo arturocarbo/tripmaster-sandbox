@@ -1,5 +1,5 @@
 // ==========================================
-// TRIPMAST3R PRO - LÓGICA PRINCIPAL (COMPATIBLE CON BACKUPS ANTERIORES)
+// TRIPMAST3R PRO - RENDERIZADO COMPLETO Y DETALLADO
 // ==========================================
 
 let tripsData = [];
@@ -106,7 +106,7 @@ window.addEventListener('click', (e) => {
   }
 });
 
-// Renderizado de lista con soporte dual para "name" y "title"
+// Renderizado de lista de viajes
 function renderTripsList() {
   const container = document.getElementById('trips-container');
   if (!container) return;
@@ -190,9 +190,21 @@ function openTripDetail(tripId) {
   if (titleEl) titleEl.textContent = trip.name || trip.title || 'Detalle del Viaje';
   if (datesEl) datesEl.textContent = (trip.startDate && trip.endDate) ? `${trip.startDate} – ${trip.endDate}` : (trip.dates || '');
 
+  // Calcular costo total buscando campos de costo directos y dentro de los detalles
   let totalCost = 0;
   if (trip.items) {
-    trip.items.forEach(i => { if (i.cost) totalCost += parseFloat(i.cost); });
+    trip.items.forEach(i => {
+      if (i.cost) {
+        totalCost += parseFloat(i.cost) || 0;
+      } else if (i.totalCost) {
+        totalCost += parseFloat(i.totalCost) || 0;
+      } else if (i.details && Array.isArray(i.details)) {
+        i.details.forEach(d => {
+          const match = d.match(/Boleto Total:\s*([\d.]+)/i) || d.match(/Costo Total:\s*([\d.]+)/i) || d.match(/\$([\d.]+)/);
+          if (match && match[1]) totalCost += parseFloat(match[1]) || 0;
+        });
+      }
+    });
   }
   if (costEl) costEl.textContent = '$' + totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' USD';
 
@@ -200,6 +212,7 @@ function openTripDetail(tripId) {
   showScreen('trip-detail');
 }
 
+// Renderizado detallado con Días, Escalas y Detalles de cada tarjeta
 function renderTimeline(trip) {
   const container = document.getElementById('timeline-container');
   if (!container) return;
@@ -210,9 +223,44 @@ function renderTimeline(trip) {
     return;
   }
 
-  const sorted = [...trip.items].sort((a, b) => new Date(a.time || a.timestamp) - new Date(b.time || b.timestamp));
+  // Ordenar por marca de tiempo / hora
+  const sorted = [...trip.items].sort((a, b) => {
+    const timeA = a.timestamp || (a.time ? new Date(a.time).getTime() : 0);
+    const timeB = b.timestamp || (b.time ? new Date(b.time).getTime() : 0);
+    return timeA - timeB;
+  });
 
-  sorted.forEach(item => {
+  let currentDayHeader = '';
+
+  sorted.forEach((item, idx) => {
+    // 1. Detección e Inserción de Cabecera de Día (SÁBADO, 26 DE DICIEMBRE)
+    let dayHeader = item.dayLabel || '';
+    if (!dayHeader && item.time) {
+      const dt = new Date(item.time);
+      if (!isNaN(dt.getTime())) {
+        dayHeader = dt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+      }
+    }
+
+    if (dayHeader && dayHeader !== currentDayHeader) {
+      currentDayHeader = dayHeader;
+      const headerEl = document.createElement('div');
+      headerEl.className = 'day-header';
+      headerEl.style.cssText = 'font-size: 0.75rem; font-weight: 800; color: #38bdf8; letter-spacing: 0.05em; margin: 18px 0 8px 0; text-transform: uppercase;';
+      headerEl.textContent = currentDayHeader;
+      container.appendChild(headerEl);
+    }
+
+    // 2. Comprobar si es un ítem de Escala/Parada (Layover)
+    if (item.isLayover) {
+      const layoverEl = document.createElement('div');
+      layoverEl.style.cssText = 'background: rgba(245, 158, 11, 0.12); border: 1px dashed #f59e0b; border-radius: 10px; padding: 8px 12px; margin: 8px 0 8px 45px; font-size: 0.75rem; color: #fbbf24; font-weight: 700; display: flex; align-items: center; gap: 8px;';
+      layoverEl.innerHTML = `<i class="fa-regular fa-clock"></i> ${item.text || 'Escala de conexión'}`;
+      container.appendChild(layoverEl);
+      return;
+    }
+
+    // 3. Renderizar tarjeta normal de evento
     const itemEl = document.createElement('div');
     itemEl.className = 'timeline-item';
     itemEl.onclick = () => openItemDetailsModal(item);
@@ -230,22 +278,44 @@ function renderTimeline(trip) {
       timeStr = isNaN(parsedTime.getTime()) ? item.time : parsedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
+    // Construir detalles adicionales (PNR, Boleto Total, Tarifa, Asientos, etc.)
+    let detailsHtml = '';
+    if (item.details && Array.isArray(item.details) && item.details.length > 0) {
+      detailsHtml = `<div class="card-meta" style="margin-top:6px; font-size:0.72rem; color:#cbd5e1; display:flex; flex-direction:column; gap:2px;">` +
+        item.details.map(d => `<div>${d}</div>`).join('') +
+        `</div>`;
+    }
+
+    const statusHtml = item.status ? `<div class="card-status" style="font-size:0.7rem; font-weight:700; color:#10b981; background:rgba(16,185,129,0.1); padding:2px 6px; border-radius:4px;">${item.status}</div>` : (item.cost ? `<div class="card-status">$${item.cost}</div>` : '');
+
     itemEl.innerHTML = `
-      <div class="time-column">${timeStr}</div>
+      <div class="time-column">${timeStr}<span class="time-zone" style="font-size:0.6rem; display:block; color:#64748b;">${item.tz || 'LOCAL'}</span></div>
       <div class="node-column">
         <div class="node-icon ${iconClass}"><i class="fa-solid ${icon}"></i></div>
         <div class="timeline-line"></div>
       </div>
       <div class="content-card">
-        <div class="card-title-row">
-          <div class="card-title">${item.title || 'Evento'}</div>
-          ${item.cost ? `<div class="card-status">$${item.cost}</div>` : ''}
+        <div class="card-title-row" style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="card-title" style="font-weight:700; font-size:0.88rem; color:#fff;">${item.title || 'Evento'}</div>
+          ${statusHtml}
         </div>
-        <div class="card-subdetail">${item.subtitle || ''}</div>
-        ${item.paymentMethod ? `<div class="card-meta"><i class="fa-solid fa-credit-card"></i> ${item.paymentMethod}</div>` : ''}
+        <div class="card-subdetail" style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">${item.subtitle || ''}</div>
+        ${detailsHtml}
+        ${item.paymentMethod ? `<div class="card-meta" style="margin-top:4px; font-size:0.72rem; color:#38bdf8;"><i class="fa-solid fa-credit-card"></i> ${item.paymentMethod}</div>` : ''}
       </div>
     `;
     container.appendChild(itemEl);
+
+    // 4. Detección automática de Escalas entre vuelos consecutivos el mismo día
+    const nextItem = sorted[idx + 1];
+    if (item.type === 'flight' && nextItem && nextItem.type === 'flight' && (item.dayLabel === nextItem.dayLabel || item.time === nextItem.time)) {
+      // Calcular diferencia entre la llegada/salida si existen las horas
+      const layoverEl = document.createElement('div');
+      layoverEl.style.cssText = 'background: rgba(245, 158, 11, 0.12); border: 1px dashed #f59e0b; border-radius: 10px; padding: 8px 12px; margin: 8px 0 8px 45px; font-size: 0.75rem; color: #fbbf24; font-weight: 700; display: flex; align-items: center; gap: 8px;';
+      const hub = item.dest || (item.title ? item.title.split('➔')[1]?.trim() : '') || 'Conexión';
+      layoverEl.innerHTML = `<i class="fa-regular fa-clock"></i> Parada de conexión en ${hub}`;
+      container.appendChild(layoverEl);
+    }
   });
 }
 
@@ -322,7 +392,7 @@ function handleFabClick() {
 }
 
 // ==========================================
-// FORMULARIOS Y MANEJO DE ITINERARIOS
+// FORMULARIOS DE ITEMS
 // ==========================================
 
 function openFlightForm() {
@@ -389,7 +459,8 @@ function saveAdvancedFlight(e) {
     dest: dest,
     airline: airline,
     flightNo: flightNo,
-    paymentMethod: paymentMethod
+    paymentMethod: paymentMethod,
+    status: 'Programado'
   };
 
   addItemToActiveTrip(itemObj);
@@ -412,7 +483,8 @@ function saveAdvancedHotel(e) {
     time: checkin,
     checkin: checkin,
     cost: cost,
-    paymentMethod: paymentMethod
+    paymentMethod: paymentMethod,
+    status: 'Confirmado'
   };
 
   addItemToActiveTrip(itemObj);
@@ -434,7 +506,8 @@ function saveAdvancedCar(e) {
     subtitle: 'Alquiler de Vehículo',
     time: pickup,
     cost: cost,
-    paymentMethod: paymentMethod
+    paymentMethod: paymentMethod,
+    status: 'Retiro'
   };
 
   addItemToActiveTrip(itemObj);
@@ -456,7 +529,8 @@ function saveAdvancedRestaurant(e) {
     subtitle: address || 'Reserva de Restaurante',
     time: time,
     cost: cost,
-    paymentMethod: paymentMethod
+    paymentMethod: paymentMethod,
+    status: 'Reserva'
   };
 
   addItemToActiveTrip(itemObj);
@@ -490,10 +564,16 @@ function openItemDetailsModal(item) {
   const bodyEl = document.getElementById('item-detail-body');
   if (titleEl) titleEl.textContent = item.title || 'Detalle del Evento';
   if (bodyEl) {
+    let detailsStr = '';
+    if (item.details && Array.isArray(item.details)) {
+      detailsStr = `<div style="margin-top:8px; font-size:0.75rem; color:#cbd5e1;">` + item.details.join('<br>') + `</div>`;
+    }
+
     bodyEl.innerHTML = `
       <div style="font-size:0.85rem; color:#fff; font-weight:700;">${item.title}</div>
       <div style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">${item.subtitle || ''}</div>
       <div style="font-size:0.75rem; color:#38bdf8; margin-top:6px;"><i class="fa-solid fa-clock"></i> ${item.time ? item.time : 'Sin hora'}</div>
+      ${detailsStr}
       ${item.cost ? `<div style="font-size:0.85rem; color:#10b981; font-weight:800; margin-top:6px;">Costo: $${item.cost}</div>` : ''}
       ${item.paymentMethod ? `<div style="font-size:0.72rem; color:#cbd5e1; margin-top:4px;"><i class="fa-solid fa-credit-card"></i> ${item.paymentMethod}</div>` : ''}
     `;
