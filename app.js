@@ -10,6 +10,7 @@ let airlinesChartObj = null;
 
 let currentTripTimeFilter = 'all';
 let currentFlightTimeFilter = 'all';
+
 let activeSelectedItemId = null;
 
 const GOOGLE_CLIENT_ID = '3946661722-akjk1dp0slafuu03bdc3hehibbe952og.apps.googleusercontent.com';
@@ -61,7 +62,6 @@ let activeTripId = '1';
 window.addEventListener('load', () => {
   loadDataFromStorage();
   renderTrips();
-  checkServiceWorkerUpdates();
 });
 
 function saveDataToStorage() {
@@ -71,7 +71,6 @@ function saveDataToStorage() {
     localStorage.setItem('tripmaster_payments', JSON.stringify(paymentMethods));
     localStorage.setItem('tripmaster_memberships', JSON.stringify(membershipPrograms));
     populateYearDropdowns();
-    checkAndPerformAutoBackup();
   } catch (e) { console.error("Error guardando datos:", e); }
 }
 
@@ -101,7 +100,6 @@ function loadDataFromStorage() {
 
     if (storedMemberships) { membershipPrograms = JSON.parse(storedMemberships); }
 
-    updateLastBackupDisplay();
     renderPaymentMethodsList();
     renderMembershipsList();
     populateYearDropdowns();
@@ -143,7 +141,7 @@ function populateYearDropdowns() {
 }
 
 // ==========================================
-// PREVISUALIZACIÓN Y ARCHIVO DE FOTO DE CELULAR
+// SELECCIÓN Y PREVISUALIZACIÓN DE IMAGEN
 // ==========================================
 function handleTripImageUpload(event) {
   const file = event.target.files[0];
@@ -170,7 +168,7 @@ function updateImagePreview(src) {
 }
 
 // ==========================================
-// NAVEGACIÓN DE PANTALLAS Y MENÚS DESPLEGABLES
+// NAVEGACIÓN Y MENÚS
 // ==========================================
 function toggleDropdown(event, menuId) {
   if (event) event.stopPropagation();
@@ -256,7 +254,7 @@ function handleFabClick() {
 }
 
 // ==========================================
-// FUNCIONES DE EDICIÓN, BORRADO Y COMPARTIR
+// GESTIÓN DE VIAJES (EDICIÓN / BORRADO)
 // ==========================================
 function editCurrentTrip() {
   closeModals();
@@ -337,7 +335,7 @@ function exportCalendar() {
 }
 
 // ==========================================
-// RENDERIZADO DE VIAJES E ITINERARIOS
+// RENDERIZADO DE VIAJES E ITINERARIO DETALLADO
 // ==========================================
 function filterTripsList() {
   const query = document.getElementById('trip-search-input')?.value.toLowerCase() || '';
@@ -532,7 +530,7 @@ function renderTimeline() {
 }
 
 // ==========================================
-// FORMULARIOS Y MODALES DE EVENTOS
+// MODALES Y EDICIÓN DE EVENTOS
 // ==========================================
 function openItemDetailsModal(itemId) {
   activeSelectedItemId = itemId;
@@ -568,7 +566,14 @@ function deleteActiveItem() {
   if (!activeSelectedItemId) return;
   const trip = trips.find(t => t.id === activeTripId);
   if (trip) {
-    trip.items = trip.items.filter(i => i.id !== activeSelectedItemId);
+    const item = trip.items.find(i => i.id === activeSelectedItemId);
+    if (item && item.hotelGroupId) {
+      trip.items = trip.items.filter(i => i.hotelGroupId !== item.hotelGroupId);
+    } else if (item && item.carGroupId) {
+      trip.items = trip.items.filter(i => i.carGroupId !== item.carGroupId);
+    } else {
+      trip.items = trip.items.filter(i => i.id !== activeSelectedItemId);
+    }
     saveDataToStorage();
     renderTimeline();
     closeModals();
@@ -592,49 +597,571 @@ function editActiveItem() {
 function openHotelForm(existingItem = null) {
   closeModals();
   populatePaymentSelectors();
-  const modal = document.getElementById('modal-hotel-form');
-  if (modal) modal.classList.add('active');
+  const formTitle = document.getElementById('hotel-form-modal-title');
+  const editIdInput = document.getElementById('edit-hotel-item-id');
+  const nameInput = document.getElementById('hotel-name');
+  const checkinInput = document.getElementById('hotel-checkin');
+  const checkoutInput = document.getElementById('hotel-checkout');
+  const costInput = document.getElementById('hotel-cost');
+  const currInput = document.getElementById('hotel-currency');
+  const payInput = document.getElementById('hotel-payment-method');
+  const addrInput = document.getElementById('hotel-address');
+
+  if (existingItem) {
+    formTitle.innerText = '✏ Editar Hotel';
+    editIdInput.value = existingItem.hotelGroupId || existingItem.id;
+    nameInput.value = (existingItem.title || '').replace(/^Check-in:\s*/i, '').replace(/^Check-out:\s*/i, '');
+
+    if (existingItem.hotelCheckinTimestamp || existingItem.timestamp) {
+      const dt = new Date(existingItem.hotelCheckinTimestamp || existingItem.timestamp);
+      checkinInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    }
+    if (existingItem.hotelCheckoutTimestamp || existingItem.arrTimestamp) {
+      const arrDt = new Date(existingItem.hotelCheckoutTimestamp || existingItem.arrTimestamp);
+      checkoutInput.value = new Date(arrDt.getTime() - (arrDt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    }
+
+    costInput.value = existingItem.hotelCost || '';
+    currInput.value = existingItem.hotelCurrency || 'USD';
+    payInput.value = existingItem.paymentMethodId || '';
+    addrInput.value = existingItem.hotelAddress || '';
+  } else {
+    formTitle.innerText = '🏨 Registrar Hotel';
+    editIdInput.value = '';
+    nameInput.value = '';
+    checkinInput.value = '';
+    checkoutInput.value = '';
+    costInput.value = '';
+    currInput.value = 'USD';
+    payInput.value = '';
+    addrInput.value = '';
+  }
+
+  document.getElementById('modal-hotel-form').classList.add('active');
 }
 
 function saveAdvancedHotel(e) {
   e.preventDefault();
+  const editGroupId = document.getElementById('edit-hotel-item-id').value;
+  const hotelName = document.getElementById('hotel-name').value.trim();
+  const checkinVal = document.getElementById('hotel-checkin').value;
+  const checkoutVal = document.getElementById('hotel-checkout').value;
+  const costVal = parseFloat(document.getElementById('hotel-cost').value) || 0;
+  const currencyVal = document.getElementById('hotel-currency').value;
+  const paymentVal = document.getElementById('hotel-payment-method').value;
+  const addressVal = document.getElementById('hotel-address').value.trim();
+
+  const checkinDt = new Date(checkinVal);
+  const checkoutDt = new Date(checkoutVal);
+  const checkinTimestamp = checkinDt.getTime();
+  const checkoutTimestamp = checkoutDt.getTime();
+
+  const diffMs = checkoutTimestamp - checkinTimestamp;
+  const nights = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+  const costPerNight = costVal > 0 ? (costVal / nights).toFixed(2) : 0;
+
+  const checkinTimeStr = checkinDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const checkinDayStr = checkinDt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+
+  const checkoutTimeStr = checkoutDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const checkoutDayStr = checkoutDt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+
+  let detailsCheckin = [`Estadía Total: ${nights} ${nights === 1 ? 'noche' : 'noches'}`];
+  if (costVal > 0) {
+    detailsCheckin.push(`Costo Total: ${costVal.toFixed(2)} ${currencyVal}`);
+    detailsCheckin.push(`Costo por Noche: ${costPerNight} ${currencyVal}/noche`);
+  }
+  if (addressVal) detailsCheckin.push(`Dirección: ${addressVal}`);
+
+  let detailsCheckout = [`Finaliza estadía de ${nights} ${nights === 1 ? 'noche' : 'noches'}`];
+  if (addressVal) detailsCheckout.push(`Ubicación: ${addressVal}`);
+
+  const groupId = editGroupId || ('hotel-group-' + Date.now());
+  const activeTrip = trips.find(t => t.id === activeTripId);
+
+  if (activeTrip) {
+    if (editGroupId) {
+      activeTrip.items = activeTrip.items.filter(i => i.hotelGroupId !== editGroupId && i.id !== editGroupId);
+    }
+
+    activeTrip.items.push({
+      id: groupId + '-checkin',
+      hotelGroupId: groupId,
+      timestamp: checkinTimestamp,
+      arrTimestamp: checkoutTimestamp,
+      hotelCheckinTimestamp: checkinTimestamp,
+      hotelCheckoutTimestamp: checkoutTimestamp,
+      dayLabel: checkinDayStr,
+      time: checkinTimeStr,
+      tz: 'LOCAL',
+      type: 'hotel',
+      title: `Check-in: ${hotelName}`,
+      status: 'Entrada',
+      subtitle: `Entrada al alojamiento (${nights} ${nights === 1 ? 'noche' : 'noches'})`,
+      details: detailsCheckin,
+      hotelCost: costVal,
+      hotelCurrency: currencyVal,
+      paymentMethodId: paymentVal,
+      hotelAddress: addressVal
+    });
+
+    activeTrip.items.push({
+      id: groupId + '-checkout',
+      hotelGroupId: groupId,
+      timestamp: checkoutTimestamp,
+      arrTimestamp: checkoutTimestamp,
+      hotelCheckinTimestamp: checkinTimestamp,
+      hotelCheckoutTimestamp: checkoutTimestamp,
+      dayLabel: checkoutDayStr,
+      time: checkoutTimeStr,
+      tz: 'LOCAL',
+      type: 'hotel',
+      title: `Check-out: ${hotelName}`,
+      status: 'Salida',
+      subtitle: `Salida del alojamiento`,
+      details: detailsCheckout,
+      hotelCost: costVal,
+      hotelCurrency: currencyVal,
+      paymentMethodId: paymentVal,
+      hotelAddress: addressVal
+    });
+
+    saveDataToStorage();
+    renderTimeline();
+  }
+
   closeModals();
+  e.target.reset();
 }
 
 function openCarForm(existingItem = null) {
   closeModals();
   populatePaymentSelectors();
-  const modal = document.getElementById('modal-car-form');
-  if (modal) modal.classList.add('active');
+  const formTitle = document.getElementById('car-form-modal-title');
+  const editIdInput = document.getElementById('edit-car-item-id');
+  const compInput = document.getElementById('car-company');
+  const modelInput = document.getElementById('car-model');
+  const pickupInput = document.getElementById('car-pickup');
+  const dropoffInput = document.getElementById('car-dropoff');
+  const costInput = document.getElementById('car-cost');
+  const currInput = document.getElementById('car-currency');
+  const payInput = document.getElementById('car-payment-method');
+  const locInput = document.getElementById('car-location');
+  const codeInput = document.getElementById('car-code');
+
+  if (existingItem) {
+    formTitle.innerText = '✏ Editar Alquiler de Auto';
+    editIdInput.value = existingItem.carGroupId || existingItem.id;
+    compInput.value = existingItem.carCompany || '';
+    modelInput.value = existingItem.carModel || '';
+
+    if (existingItem.carPickupTimestamp || existingItem.timestamp) {
+      const dt = new Date(existingItem.carPickupTimestamp || existingItem.timestamp);
+      pickupInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    }
+    if (existingItem.carDropoffTimestamp || existingItem.arrTimestamp) {
+      const dt = new Date(existingItem.carDropoffTimestamp || existingItem.arrTimestamp);
+      dropoffInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    }
+
+    costInput.value = existingItem.carCost || '';
+    currInput.value = existingItem.carCurrency || 'USD';
+    payInput.value = existingItem.paymentMethodId || '';
+    locInput.value = existingItem.carLocation || '';
+    codeInput.value = existingItem.carCode || '';
+  } else {
+    formTitle.innerText = '🚗 Alquiler de Vehículo';
+    editIdInput.value = '';
+    compInput.value = '';
+    modelInput.value = '';
+    pickupInput.value = '';
+    dropoffInput.value = '';
+    costInput.value = '';
+    currInput.value = 'USD';
+    payInput.value = '';
+    locInput.value = '';
+    codeInput.value = '';
+  }
+
+  document.getElementById('modal-car-form').classList.add('active');
 }
 
 function saveAdvancedCar(e) {
   e.preventDefault();
+  const editGroupId = document.getElementById('edit-car-item-id').value;
+  const company = document.getElementById('car-company').value.trim();
+  const model = document.getElementById('car-model').value.trim();
+  const pickupVal = document.getElementById('car-pickup').value;
+  const dropoffVal = document.getElementById('car-dropoff').value;
+  const costVal = parseFloat(document.getElementById('car-cost').value) || 0;
+  const currencyVal = document.getElementById('car-currency').value;
+  const paymentVal = document.getElementById('car-payment-method').value;
+  const locationVal = document.getElementById('car-location').value.trim();
+  const codeVal = document.getElementById('car-code').value.trim();
+
+  const pickupDt = new Date(pickupVal);
+  const dropoffDt = new Date(dropoffVal);
+  const pickupTimestamp = pickupDt.getTime();
+  const dropoffTimestamp = dropoffDt.getTime();
+
+  const diffMs = dropoffTimestamp - pickupTimestamp;
+  const days = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+
+  const pickupTimeStr = pickupDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const pickupDayStr = pickupDt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+
+  const dropoffTimeStr = dropoffDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dropoffDayStr = dropoffDt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+
+  let detailsPickup = [`Vehículo: ${model}`, `Alquiler Total: ${days} ${days === 1 ? 'día' : 'días'}`];
+  if (costVal > 0) detailsPickup.push(`Costo Total: ${costVal.toFixed(2)} ${currencyVal}`);
+  if (locationVal) detailsPickup.push(`Oficina / Retiro: ${locationVal}`);
+  if (codeVal) detailsPickup.push(`Código Reserva: ${codeVal}`);
+
+  let detailsDropoff = [`Vehículo: ${model}`, `Devolución tras ${days} ${days === 1 ? 'día' : 'días'}`];
+  if (locationVal) detailsDropoff.push(`Oficina Devolución: ${locationVal}`);
+
+  const groupId = editGroupId || ('car-group-' + Date.now());
+  const activeTrip = trips.find(t => t.id === activeTripId);
+
+  if (activeTrip) {
+    if (editGroupId) {
+      activeTrip.items = activeTrip.items.filter(i => i.carGroupId !== editGroupId && i.id !== editGroupId);
+    }
+
+    activeTrip.items.push({
+      id: groupId + '-pickup',
+      carGroupId: groupId,
+      timestamp: pickupTimestamp,
+      arrTimestamp: dropoffTimestamp,
+      carPickupTimestamp: pickupTimestamp,
+      carDropoffTimestamp: dropoffTimestamp,
+      dayLabel: pickupDayStr,
+      time: pickupTimeStr,
+      tz: 'LOCAL',
+      type: 'car',
+      title: `Retiro: ${company}`,
+      status: 'Retiro',
+      subtitle: `${model} (${days} ${days === 1 ? 'día' : 'días'})`,
+      details: detailsPickup,
+      carCost: costVal,
+      carCurrency: currencyVal,
+      paymentMethodId: paymentVal,
+      carCompany: company,
+      carModel: model,
+      carLocation: locationVal,
+      carCode: codeVal
+    });
+
+    activeTrip.items.push({
+      id: groupId + '-dropoff',
+      carGroupId: groupId,
+      timestamp: dropoffTimestamp,
+      arrTimestamp: dropoffTimestamp,
+      carPickupTimestamp: pickupTimestamp,
+      carDropoffTimestamp: dropoffTimestamp,
+      dayLabel: dropoffDayStr,
+      time: dropoffTimeStr,
+      tz: 'LOCAL',
+      type: 'car',
+      title: `Devolución: ${company}`,
+      status: 'Devolución',
+      subtitle: `Entrega de ${model}`,
+      details: detailsDropoff,
+      carCost: costVal,
+      carCurrency: currencyVal,
+      paymentMethodId: paymentVal,
+      carCompany: company,
+      carModel: model,
+      carLocation: locationVal,
+      carCode: codeVal
+    });
+
+    saveDataToStorage();
+    renderTimeline();
+  }
+
   closeModals();
+  e.target.reset();
 }
 
 function openRestaurantForm(existingItem = null) {
   closeModals();
   populatePaymentSelectors();
-  const modal = document.getElementById('modal-restaurant-form');
-  if (modal) modal.classList.add('active');
+  const formTitle = document.getElementById('restaurant-form-modal-title');
+  const editIdInput = document.getElementById('edit-restaurant-item-id');
+  const nameInput = document.getElementById('restaurant-name');
+  const timeInput = document.getElementById('restaurant-time');
+  const peopleInput = document.getElementById('restaurant-people');
+  const costInput = document.getElementById('restaurant-cost');
+  const currInput = document.getElementById('restaurant-currency');
+  const payInput = document.getElementById('restaurant-payment-method');
+  const addrInput = document.getElementById('restaurant-address');
+  const notesInput = document.getElementById('restaurant-notes');
+
+  if (existingItem) {
+    formTitle.innerText = '✏ Editar Reserva / Factura de Restaurante';
+    editIdInput.value = existingItem.id;
+    nameInput.value = existingItem.restaurantName || existingItem.title || '';
+
+    if (existingItem.timestamp) {
+      const dt = new Date(existingItem.timestamp);
+      timeInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    }
+
+    peopleInput.value = existingItem.restaurantPeople || '';
+    costInput.value = existingItem.restaurantCost || '';
+    currInput.value = existingItem.restaurantCurrency || 'USD';
+    payInput.value = existingItem.paymentMethodId || '';
+    addrInput.value = existingItem.restaurantAddress || '';
+    notesInput.value = existingItem.restaurantNotes || '';
+  } else {
+    formTitle.innerText = '🍽 Reserva & Factura de Restaurante';
+    editIdInput.value = '';
+    nameInput.value = '';
+    timeInput.value = '';
+    peopleInput.value = '';
+    costInput.value = '';
+    currInput.value = 'USD';
+    payInput.value = '';
+    addrInput.value = '';
+    notesInput.value = '';
+  }
+
+  document.getElementById('modal-restaurant-form').classList.add('active');
 }
 
 function saveAdvancedRestaurant(e) {
   e.preventDefault();
+  const editItemId = document.getElementById('edit-restaurant-item-id').value;
+  const name = document.getElementById('restaurant-name').value.trim();
+  const timeVal = document.getElementById('restaurant-time').value;
+  const peopleVal = document.getElementById('restaurant-people').value.trim();
+  const costVal = parseFloat(document.getElementById('restaurant-cost').value) || 0;
+  const currencyVal = document.getElementById('restaurant-currency').value;
+  const paymentVal = document.getElementById('restaurant-payment-method').value;
+  const addressVal = document.getElementById('restaurant-address').value.trim();
+  const notesVal = document.getElementById('restaurant-notes').value.trim();
+
+  const dt = new Date(timeVal);
+  const timestamp = dt.getTime();
+  const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dayStr = dt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+
+  let detailsArr = [];
+  if (peopleVal) detailsArr.push(`Mesa / Asistentes: ${peopleVal}`);
+  if (costVal > 0) detailsArr.push(`Factura / Presupuesto: ${costVal.toFixed(2)} ${currencyVal}`);
+  if (addressVal) detailsArr.push(`Ubicación: ${addressVal}`);
+  if (notesVal) detailsArr.push(`Notas: ${notesVal}`);
+
+  const activeTrip = trips.find(t => t.id === activeTripId);
+  if (activeTrip) {
+    if (editItemId) {
+      const existingItem = activeTrip.items.find(i => i.id === editItemId);
+      if (existingItem) {
+        existingItem.timestamp = timestamp;
+        existingItem.dayLabel = dayStr;
+        existingItem.time = timeStr;
+        existingItem.title = name;
+        existingItem.subtitle = peopleVal || 'Reserva Gastronómica';
+        existingItem.details = detailsArr;
+        existingItem.restaurantName = name;
+        existingItem.restaurantPeople = peopleVal;
+        existingItem.restaurantCost = costVal;
+        existingItem.restaurantCurrency = currencyVal;
+        existingItem.paymentMethodId = paymentVal;
+        existingItem.restaurantAddress = addressVal;
+        existingItem.restaurantNotes = notesVal;
+      }
+    } else {
+      activeTrip.items.push({
+        id: 'item-' + Date.now(),
+        timestamp: timestamp,
+        dayLabel: dayStr,
+        time: timeStr,
+        tz: 'LOCAL',
+        type: 'food',
+        title: name,
+        status: 'Confirmado',
+        subtitle: peopleVal || 'Reserva Gastronómica',
+        details: detailsArr,
+        restaurantName: name,
+        restaurantPeople: peopleVal,
+        restaurantCost: costVal,
+        restaurantCurrency: currencyVal,
+        paymentMethodId: paymentVal,
+        restaurantAddress: addressVal,
+        restaurantNotes: notesVal
+      });
+    }
+
+    saveDataToStorage();
+    renderTimeline();
+  }
+
   closeModals();
+  e.target.reset();
 }
 
 function openFlightForm(existingItem = null) {
   closeModals();
   populatePaymentSelectors();
-  const modal = document.getElementById('modal-flight-form');
-  if (modal) modal.classList.add('active');
+  const formTitle = document.getElementById('flight-form-modal-title');
+  const editIdInput = document.getElementById('edit-item-id');
+  const noInput = document.getElementById('flight-no');
+  const airlineInput = document.getElementById('flight-airline');
+  const origInput = document.getElementById('flight-origin');
+  const destInput = document.getElementById('flight-dest');
+  const depTimeInput = document.getElementById('flight-dep-time');
+  const arrTimeInput = document.getElementById('flight-arr-time');
+  const totalCostInput = document.getElementById('flight-total-cost');
+  const fareCostInput = document.getElementById('flight-fare-cost');
+  const currInput = document.getElementById('flight-currency');
+  const payInput = document.getElementById('flight-payment-method');
+  const gateInput = document.getElementById('flight-gate');
+  const seatInput = document.getElementById('flight-seat');
+  const codeInput = document.getElementById('flight-code');
+
+  if (existingItem) {
+    formTitle.innerText = '✏ Editar Vuelo';
+    editIdInput.value = existingItem.id;
+
+    const ports = existingItem.title ? existingItem.title.split('–') : ['', ''];
+    origInput.value = ports[0] ? ports[0].trim() : '';
+    destInput.value = ports[1] ? ports[1].trim() : '';
+
+    const flightMatch = existingItem.subtitle ? existingItem.subtitle.match(/^(.*?)\s*\((.*?)\)$/) : null;
+    if (flightMatch) {
+      noInput.value = flightMatch[1];
+      airlineInput.value = flightMatch[2];
+    } else {
+      noInput.value = existingItem.subtitle || '';
+      airlineInput.value = '';
+    }
+
+    if (existingItem.timestamp) {
+      const dt = new Date(existingItem.timestamp);
+      depTimeInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    }
+    if (existingItem.arrTimestamp) {
+      const arrDt = new Date(existingItem.arrTimestamp);
+      arrTimeInput.value = new Date(arrDt.getTime() - (arrDt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    }
+
+    totalCostInput.value = existingItem.flightTotalCost || '';
+    fareCostInput.value = existingItem.flightFareCost || '';
+    currInput.value = existingItem.flightCurrency || 'USD';
+    payInput.value = existingItem.paymentMethodId || '';
+  } else {
+    formTitle.innerText = '✈ Registrar Vuelo';
+    editIdInput.value = '';
+    noInput.value = '';
+    airlineInput.value = '';
+    origInput.value = '';
+    destInput.value = '';
+    depTimeInput.value = '';
+    arrTimeInput.value = '';
+    totalCostInput.value = '';
+    fareCostInput.value = '';
+    currInput.value = 'USD';
+    payInput.value = '';
+    gateInput.value = '';
+    seatInput.value = '';
+    codeInput.value = '';
+  }
+
+  document.getElementById('modal-flight-form').classList.add('active');
 }
 
 function saveAdvancedFlight(e) {
   e.preventDefault();
+  const editItemId = document.getElementById('edit-item-id').value;
+  const flightNo = document.getElementById('flight-no').value.trim();
+  const airline = document.getElementById('flight-airline').value.trim();
+  const origin = document.getElementById('flight-origin').value.toUpperCase().trim();
+  const dest = document.getElementById('flight-dest').value.toUpperCase().trim();
+  const datetime = document.getElementById('flight-dep-time').value;
+  const arrDatetime = document.getElementById('flight-arr-time').value;
+  const gate = document.getElementById('flight-gate').value.trim();
+  const seat = document.getElementById('flight-seat').value.trim();
+  const code = document.getElementById('flight-code').value.trim();
+
+  const totalCostVal = parseFloat(document.getElementById('flight-total-cost').value) || 0;
+  const fareCostVal = parseFloat(document.getElementById('flight-fare-cost').value) || 0;
+  const currencyVal = document.getElementById('flight-currency').value;
+  const paymentVal = document.getElementById('flight-payment-method').value;
+  const taxesVal = Math.max(0, totalCostVal - fareCostVal);
+
+  const dt = new Date(datetime);
+  const timestamp = dt.getTime();
+  const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dayStr = dt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+
+  let arrTimestamp = null;
+  let detailsArr = [];
+  if (code) detailsArr.push(`Confirmación PNR: ${code}`);
+  if (seat) detailsArr.push(`Asiento: ${seat}`);
+  if (gate) detailsArr.push(`Terminal / Gate: ${gate}`);
+  
+  if (totalCostVal > 0) {
+    let costLine = `Boleto Total: ${totalCostVal.toFixed(2)} ${currencyVal}`;
+    if (fareCostVal > 0) {
+      costLine += ` (Fare: ${fareCostVal.toFixed(2)} | Impuestos: ${taxesVal.toFixed(2)})`;
+    }
+    detailsArr.push(costLine);
+  }
+
+  if (arrDatetime) {
+    const arrDt = new Date(arrDatetime);
+    arrTimestamp = arrDt.getTime();
+    detailsArr.push(`Llegada: ${arrDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+  }
+
+  const activeTrip = trips.find(t => t.id === activeTripId);
+  if (activeTrip) {
+    const subtitleStr = airline ? `${flightNo} (${airline})` : flightNo;
+    if (editItemId) {
+      const existingItem = activeTrip.items.find(i => i.id === editItemId);
+      if (existingItem) {
+        existingItem.timestamp = timestamp;
+        existingItem.arrTimestamp = arrTimestamp;
+        existingItem.dayLabel = dayStr;
+        existingItem.time = timeStr;
+        existingItem.title = `${origin} – ${dest}`;
+        existingItem.subtitle = subtitleStr;
+        existingItem.details = detailsArr;
+        existingItem.flightTotalCost = totalCostVal;
+        existingItem.flightFareCost = fareCostVal;
+        existingItem.flightTaxesCost = taxesVal;
+        existingItem.flightCurrency = currencyVal;
+        existingItem.paymentMethodId = paymentVal;
+      }
+    } else {
+      activeTrip.items.push({
+        id: 'item-' + Date.now(),
+        timestamp: timestamp,
+        arrTimestamp: arrTimestamp,
+        dayLabel: dayStr,
+        time: timeStr,
+        tz: 'LOCAL',
+        type: 'flight',
+        title: `${origin} – ${dest}`,
+        status: 'Programado',
+        subtitle: subtitleStr,
+        details: detailsArr,
+        flightTotalCost: totalCostVal,
+        flightFareCost: fareCostVal,
+        flightTaxesCost: taxesVal,
+        flightCurrency: currencyVal,
+        paymentMethodId: paymentVal
+      });
+    }
+    saveDataToStorage();
+    renderTimeline();
+  }
+
   closeModals();
+  e.target.reset();
 }
 
 function openModalNewTrip() {
@@ -688,7 +1215,7 @@ function saveTripForm(e) {
 }
 
 // ==========================================
-// CONSULTA DE AEROPUERTOS A WIKIDATA
+// MAPAS Y RUTAS GEODÉSICAS
 // ==========================================
 async function fetchAirportFromWikidata(iata) {
   const cleanIata = (iata || '').toUpperCase().trim();
@@ -726,16 +1253,6 @@ async function fetchAirportFromWikidata(iata) {
   return null;
 }
 
-// ==========================================
-// FLIGHT HUB, MAPAS Y ESTADÍSTICAS
-// ==========================================
-function setFlightTimeFilter(filterType) {
-  currentFlightTimeFilter = filterType;
-  document.querySelectorAll('#subview-flighthub-vuelos .pill-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(`pill-flight-${filterType}`)?.classList.add('active');
-  renderAirFlightsList();
-}
-
 function initFlightMap() {
   if (!flightMap) {
     flightMap = L.map('leafletMap', { zoomControl: false }).setView([10, -75], 2);
@@ -759,12 +1276,46 @@ async function renderMapGeodesicRoutes() {
 
   let totalMiles = 0;
   let totalFlightsCount = 0;
+  let routePromises = [];
 
   for (let t of trips) {
     for (let i of (t.items || [])) {
-      if (i.type === 'flight') totalFlightsCount++;
+      if (i.type === 'flight') {
+        totalFlightsCount++;
+        const parts = i.title ? i.title.split('–') : [];
+        if (parts.length === 2) {
+          const origIata = parts[0].trim();
+          const destIata = parts[1].trim();
+
+          routePromises.push((async () => {
+            const apOrig = await fetchAirportFromWikidata(origIata);
+            const apDest = await fetchAirportFromWikidata(destIata);
+            return { apOrig, apDest };
+          })());
+        }
+      }
     }
   }
+
+  const results = await Promise.allSettled(routePromises);
+
+  results.forEach(res => {
+    if (res.status === 'fulfilled' && res.value) {
+      const { apOrig, apDest } = res.value;
+      if (apOrig && apDest && apOrig.lat !== 0 && apDest.lat !== 0) {
+        const startPt = [apOrig.lng, apOrig.lat];
+        const endPt = [apDest.lng, apDest.lat];
+
+        const gcArc = turf.greatCircle(turf.point(startPt), turf.point(endPt), { npoints: 50 });
+        const leafletCoords = gcArc.geometry.coordinates.map(c => [c[1], c[0]]);
+
+        const polylineLayer = L.polyline(leafletCoords, { color: '#0084ff', weight: 3, opacity: 0.8 }).addTo(flightMap);
+        mapPolylines.push(polylineLayer);
+
+        totalMiles += Math.round(turf.distance(turf.point(startPt), turf.point(endPt), { units: 'miles' }));
+      }
+    }
+  });
 
   const distEl = document.getElementById('map-total-distance');
   const countEl = document.getElementById('map-total-flights');
@@ -772,10 +1323,46 @@ async function renderMapGeodesicRoutes() {
   if (countEl) countEl.innerText = totalFlightsCount.toString();
 }
 
+function setFlightTimeFilter(filterType) {
+  currentFlightTimeFilter = filterType;
+  document.querySelectorAll('#subview-flighthub-vuelos .pill-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`pill-flight-${filterType}`)?.classList.add('active');
+  renderAirFlightsList();
+}
+
 function renderAirFlightsList() {
   const container = document.getElementById('air-flights-list');
   if (!container) return;
-  container.innerHTML = `<div style="text-align:center; padding:30px; color:#94a3b8;">Lista de vuelos lista.</div>`;
+  container.innerHTML = '';
+  let flightCount = 0;
+  const now = new Date();
+
+  trips.forEach(t => {
+    let tripFlights = (t.items || []).filter(i => i.type === 'flight').sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+    if (currentFlightTimeFilter === 'upcoming') {
+      tripFlights = tripFlights.filter(f => (f.timestamp || 0) >= now.getTime());
+    } else if (currentFlightTimeFilter === 'past') {
+      tripFlights = tripFlights.filter(f => (f.timestamp || 0) < now.getTime());
+    }
+
+    if (tripFlights.length === 0) return;
+
+    tripFlights.forEach(f => {
+      flightCount++;
+      container.innerHTML += `
+        <div class="dark-card" style="margin-bottom:8px;">
+          <div style="font-weight:700; color:#fff; font-size:0.9rem;">${f.subtitle || 'Vuelo'} (${f.title})</div>
+          <div style="font-size:0.75rem; color:#38bdf8; margin-top:2px;">📅 ${f.dayLabel} • ${f.time}</div>
+          <div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px;">Viaje: ${t.title}</div>
+        </div>
+      `;
+    });
+  });
+
+  if (flightCount === 0) {
+    container.innerHTML = `<div style="text-align:center; padding:30px; color:#94a3b8;">No hay vuelos registrados en esta categoría.</div>`;
+  }
 }
 
 function getFilteredTripsForStats() {
@@ -807,7 +1394,7 @@ function renderSelectedCategoryStats() {
 }
 
 // ==========================================
-// PACKING & MÉTODOS DE PAGO
+// LISTA DE EQUIPAJE Y MÉTODOS DE PAGO
 // ==========================================
 function renderPackingList() {
   const container = document.getElementById('packing-list-container');
@@ -822,9 +1409,7 @@ function renderPackingList() {
   });
 }
 
-function resetPackingCheckmarks() {
-  renderPackingList();
-}
+function resetPackingCheckmarks() { renderPackingList(); }
 
 function addPackingItem(e) {
   e.preventDefault();
@@ -847,6 +1432,7 @@ function renderPaymentMethodsList() {
       </div>
     `;
   });
+  populatePaymentSelectors();
 }
 
 function populatePaymentSelectors() {
@@ -873,8 +1459,6 @@ function renderMembershipsList() {}
 function saveMembershipProgram(e) { e.preventDefault(); closeModals(); }
 
 function connectGoogleDrive() {}
-function checkAndPerformAutoBackup() {}
-function updateLastBackupDisplay() {}
 
 function exportLocalJson() {
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ trips, packingItems, paymentMethods }, null, 2));
@@ -896,11 +1480,9 @@ function importLocalJson(e) {
         trips = parsed.trips;
         saveDataToStorage();
         renderTrips();
-        alert('✔ Datos restaurados.');
+        alert('✔ Datos restaurados correctamente.');
       }
     } catch (err) { alert('Archivo no válido.'); }
   };
   reader.readAsText(file);
 }
-
-function checkServiceWorkerUpdates() {}
