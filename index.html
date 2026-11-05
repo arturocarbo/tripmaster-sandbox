@@ -89,7 +89,7 @@
     .day-header { font-weight: 800; font-size: 0.85rem; color: var(--accent); margin: 20px 0 10px 0; text-transform: uppercase; }
     .layover-box { background: rgba(255,183,3,0.1); color: var(--accent); font-size: 0.75rem; font-weight: 600; padding: 6px 12px; border-radius: 8px; margin: 8px 0 16px 57px; }
 
-    /* REGLAS CORREGIDAS DE LA BARRA INFERIOR */
+    /* REGLAS DE LA BARRA INFERIOR */
     .bottom-nav {
       position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: #090d16;
       display: flex; justify-content: space-around; align-items: center; border-top: 1px solid rgba(255,255,255,0.08); z-index: 50;
@@ -380,7 +380,7 @@
   <!-- BOTÓN FLOTANTE (FAB) -->
   <button class="fab-btn" onclick="handleFabClick()"><i class="fa-solid fa-plus"></i></button>
 
-  <!-- BARRA DE NAVEGACIÓN INFERIOR (CORREGIDA CON ESTILOS ESTRUCTURADOS) -->
+  <!-- BARRA DE NAVEGACIÓN INFERIOR -->
   <nav class="bottom-nav">
     <button class="nav-item active" onclick="switchMainTab('trips-list')">
       <i class="fa-solid fa-suitcase"></i>
@@ -610,7 +610,7 @@
 
         <div class="form-group">
           <span class="form-label">💳 Método de Pago Usado</span>
-          <select id="car-payment-method" class="form-select payment-selector-dropdown"></select>
+          <select id="car-payment-method" class="payment-selector-dropdown form-select"></select>
         </div>
 
         <div class="form-group">
@@ -670,7 +670,7 @@
 
         <div class="form-group">
           <span class="form-label">💳 Método de Pago Usado</span>
-          <select id="restaurant-payment-method" class="form-select payment-selector-dropdown"></select>
+          <select id="restaurant-payment-method" class="payment-selector-dropdown form-select"></select>
         </div>
 
         <div class="form-group">
@@ -703,7 +703,7 @@
     </div>
   </div>
 
-  <!-- MODAL NUEVO VIAJE -->
+  <!-- MODAL NUEVO VIAJE CON SELECCIÓN DE FOTO INTEGRADA -->
   <div id="modal-new-trip" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header-row">
@@ -730,10 +730,22 @@
             <input type="date" id="trip-end-input" class="form-input">
           </div>
         </div>
+        
+        <!-- SECCIÓN DE IMAGEN ACTUALIZADA CON FOTO LOCAL -->
         <div class="form-group">
-          <span class="form-label">Imagen (URL)</span>
-          <input type="text" id="trip-image-url" placeholder="https://..." class="form-input">
+          <span class="form-label">Imagen del Viaje</span>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <label class="form-input" style="text-align:center; font-weight:700; cursor:pointer; background:rgba(0,132,255,0.15); color:var(--primary); border:1px dashed var(--primary);">
+              <i class="fa-solid fa-image mr-2"></i> Seleccionar foto del celular
+              <input type="file" id="trip-image-file" accept="image/*" onchange="previewTripImageFile(event)" style="display:none;">
+            </label>
+            <input type="text" id="trip-image-url" placeholder="O pega una URL de imagen (https://...)" class="form-input">
+          </div>
+          <div id="trip-image-preview-container" style="display:none; margin-top:8px; text-align:center;">
+            <img id="trip-image-preview" src="" style="width:100%; height:120px; object-fit:cover; border-radius:10px; border:1px solid rgba(255,255,255,0.1);">
+          </div>
         </div>
+
         <button type="submit" class="btn-submit">Guardar Viaje</button>
       </form>
     </div>
