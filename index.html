@@ -4,12 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>TripMaster Pro</title>
+
+  <!-- Librerías de Iconos, Mapas y Gráficos -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
   <style>
     :root {
       --bg-dark: #0f172a;
@@ -48,8 +51,8 @@
     .trip-card-dates { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; }
     .trip-card-badge { font-size: 0.7rem; color: #38bdf8; background: rgba(56, 189, 248, 0.1); padding: 2px 8px; border-radius: 6px; align-self: flex-start; }
 
-    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid var(--card-border); display: flex; justify-content: space-around; padding: 8px 0; z-index: 50; }
-    .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 0.7rem; background: none; border: none; cursor: pointer; gap: 4px; }
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; border-top: 1px solid var(--card-border); display: flex; justify-space-around; padding: 8px 0; z-index: 50; }
+    .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 0.7rem; background: none; border: none; cursor: pointer; gap: 4px; flex: 1; }
     .nav-item.active { color: var(--accent-blue); }
     .nav-item i { font-size: 1.2rem; }
 
@@ -100,7 +103,7 @@
 </head>
 <body>
 
-  <!-- SCREEN 1: TRIPS LIST -->
+  <!-- SCREEN 1: MIS VIAJES -->
   <div id="screen-trips-list" class="screen active">
     <div class="app-header">
       <div class="header-title"><i class="fa-solid fa-briefcase" style="color:#38bdf8;"></i> Mis Viajes</div>
@@ -130,14 +133,14 @@
     <div class="search-box">
       <div class="search-input-wrapper">
         <i class="fa-solid fa-magnifying-glass" style="color:var(--text-muted);"></i>
-        <input type="text" id="trip-search-input" placeholder="Buscar itinerarios..." onkeyup="filterTripsList()">
+        <input type="text" id="trip-search-input" placeholder="Buscar viajes..." onkeyup="filterTripsList()">
       </div>
     </div>
 
     <div class="trips-list" id="trips-container"></div>
   </div>
 
-  <!-- SCREEN 2: TRIP DETAIL -->
+  <!-- SCREEN 2: DETALLE DE ITINERARIO -->
   <div id="screen-trip-detail" class="screen">
     <div class="app-header">
       <button class="action-icon-btn" onclick="showScreen('trips-list')"><i class="fa-solid fa-chevron-left"></i></button>
@@ -172,7 +175,6 @@
       <button class="flight-hub-tab" onclick="switchFlightHubSubtab('stats')">Estadísticas & Métricas</button>
     </div>
 
-    <!-- SUBVIEW: LISTA DE VUELOS -->
     <div id="subview-flighthub-vuelos" class="flighthub-subview">
       <div style="display:flex; gap:8px; margin-bottom:12px;">
         <button class="pill-btn active" id="pill-flight-all" onclick="setFlightTimeFilter('all')">Todos</button>
@@ -182,7 +184,6 @@
       <div id="air-flights-list"></div>
     </div>
 
-    <!-- SUBVIEW: ESTADÍSTICAS Y MÉTRICAS MULTICATEGORÍA -->
     <div id="subview-flighthub-stats" class="flighthub-subview" style="display:none;">
       <div style="display:flex; gap:8px; margin-bottom:12px;">
         <select id="stats-category-select" onchange="renderSelectedCategoryStats()" style="flex:1; background:#1e293b; color:#fff; border:1px solid var(--card-border); border-radius:8px; padding:6px; font-size:0.8rem;">
@@ -195,7 +196,6 @@
         </select>
       </div>
 
-      <!-- PANEL VIAJES -->
       <div id="stats-panel-trips">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:12px;">
           <div class="dark-card"><div style="font-size:0.7rem; color:var(--text-muted);">Días Totales</div><div id="trip-stat-days" style="font-size:1.2rem; font-weight:800; color:#0084ff;">0</div></div>
@@ -205,7 +205,6 @@
         </div>
       </div>
 
-      <!-- PANEL VUELOS -->
       <div id="stats-panel-flights" style="display:none;">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:12px;">
           <div class="dark-card"><div style="font-size:0.7rem; color:var(--text-muted);">Distancia Total</div><div id="stat-miles" style="font-size:1.1rem; font-weight:800; color:#0084ff;">0 mi</div></div>
@@ -223,7 +222,6 @@
         </div>
       </div>
 
-      <!-- PANEL HOTELES -->
       <div id="stats-panel-hotels" style="display:none;">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
           <div class="dark-card"><div style="font-size:0.7rem; color:var(--text-muted);">Noches Totales</div><div id="hotel-stat-nights" style="font-size:1.2rem; font-weight:800; color:#0084ff;">0</div></div>
@@ -233,7 +231,7 @@
     </div>
   </div>
 
-  <!-- SCREEN 4: MAPA MUNDIAL -->
+  <!-- SCREEN 4: MAPA MUNDIAL GEODÉSICO -->
   <div id="screen-map-view" class="screen">
     <div class="app-header">
       <div class="header-title" style="color:#0084ff;"><i class="fa-solid fa-earth-americas"></i> Mapa Geodésico</div>
@@ -249,7 +247,7 @@
     </div>
   </div>
 
-  <!-- SCREEN 5: DOCUMENTOS, MILLES & PAGO -->
+  <!-- SCREEN 5: DOCUMENTOS Y MILLES -->
   <div id="screen-documents" class="screen">
     <div class="app-header">
       <div class="header-title" style="color:#38bdf8;"><i class="fa-solid fa-folder-open"></i> Documentos & Perfil</div>
@@ -290,7 +288,7 @@
     </div>
   </div>
 
-  <!-- NAVEGACIÓN INFERIOR Y FAB GENERAL -->
+  <!-- BARRA DE NAVEGACIÓN INFERIOR Y FAB GENERAL -->
   <button class="fab" onclick="handleFabClick()"><i class="fa-solid fa-plus"></i></button>
 
   <div class="bottom-nav">
@@ -300,7 +298,7 @@
     <button class="nav-item" onclick="switchMainTab('documents')"><i class="fa-solid fa-id-card"></i> Perfil</button>
   </div>
 
-  <!-- MODAL 1: MENÚ FAB INTERACTIVO PARA AGREGAR EVENTOS EN ITINERARIO -->
+  <!-- MODAL: MENÚ INTERACTIVO (+ FAB) PARA REGISTRAR EN ITINERARIO -->
   <div class="modal-overlay" id="modal-add-item">
     <div class="action-sheet">
       <div class="sheet-header">
@@ -316,7 +314,7 @@
     </div>
   </div>
 
-  <!-- MODAL 2: CREAR / EDITAR VIAJE (CON SELECCIÓN DE IMAGEN DEL CELULAR) -->
+  <!-- MODAL: CREAR / EDITAR VIAJE (FOTO DESDE MÓVIL Y URL) -->
   <div class="modal-overlay" id="modal-new-trip">
     <div class="action-sheet">
       <div class="sheet-header">
@@ -345,7 +343,7 @@
     </div>
   </div>
 
-  <!-- MODAL 3: REGISTRAR / EDITAR VUELO -->
+  <!-- MODAL: VUELO -->
   <div class="modal-overlay" id="modal-flight-form">
     <div class="action-sheet">
       <div class="sheet-header">
@@ -384,7 +382,7 @@
     </div>
   </div>
 
-  <!-- MODAL 4: REGISTRAR / EDITAR HOTEL -->
+  <!-- MODAL: HOTEL -->
   <div class="modal-overlay" id="modal-hotel-form">
     <div class="action-sheet">
       <div class="sheet-header">
@@ -409,7 +407,7 @@
     </div>
   </div>
 
-  <!-- MODAL 5: REGISTRAR / EDITAR AUTO -->
+  <!-- MODAL: AUTO -->
   <div class="modal-overlay" id="modal-car-form">
     <div class="action-sheet">
       <div class="sheet-header">
@@ -440,7 +438,7 @@
     </div>
   </div>
 
-  <!-- MODAL 6: REGISTRAR / EDITAR RESTAURANTE -->
+  <!-- MODAL: RESTAURANTE -->
   <div class="modal-overlay" id="modal-restaurant-form">
     <div class="action-sheet">
       <div class="sheet-header">
@@ -466,7 +464,7 @@
     </div>
   </div>
 
-  <!-- MODAL 7: DETALLE Y ELIMINACIÓN DE ELEMENTO SELECCIONADO -->
+  <!-- MODAL: DETALLE / ACCIONES DE EVENTO -->
   <div class="modal-overlay" id="modal-item-details">
     <div class="action-sheet">
       <div class="sheet-header">
@@ -481,7 +479,7 @@
     </div>
   </div>
 
-  <!-- MODAL 8: NUEVO MÉTODO DE PAGO -->
+  <!-- MODAL: MÉTODO DE PAGO -->
   <div class="modal-overlay" id="modal-add-payment">
     <div class="action-sheet">
       <div class="sheet-header">
@@ -497,12 +495,12 @@
     </div>
   </div>
 
-  <!-- MODAL 9: CONFIRMACIÓN DE ELIMINACIÓN DE VIAJE -->
+  <!-- MODAL: BORRADO DE VIAJE -->
   <div class="modal-overlay" id="modal-confirm-delete">
     <div class="action-sheet" style="text-align: center;">
       <div style="font-size: 2.5rem; color: #ef4444; margin-bottom: 8px;"><i class="fa-solid fa-triangle-exclamation"></i></div>
       <div class="sheet-title" style="font-size: 1.1rem; margin-bottom: 6px;">¿Eliminar este viaje?</div>
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;" id="delete-trip-msg">Se borrarán de forma permanente todos los datos asociados.</p>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;" id="delete-trip-msg">Se borrarán de forma permanente todos los itinerarios registrados.</p>
       <div style="display:flex; gap:10px;">
         <button class="btn-submit" style="background:#ef4444;" onclick="confirmDeleteTrip()">Sí, eliminar viaje</button>
         <button class="btn-submit" style="background:#334155;" onclick="closeModals()">Cancelar</button>
