@@ -89,13 +89,19 @@
     .day-header { font-weight: 800; font-size: 0.85rem; color: var(--accent); margin: 20px 0 10px 0; text-transform: uppercase; }
     .layover-box { background: rgba(255,183,3,0.1); color: var(--accent); font-size: 0.75rem; font-weight: 600; padding: 6px 12px; border-radius: 8px; margin: 8px 0 16px 57px; }
 
+    /* REGLAS CORREGIDAS DE LA BARRA INFERIOR */
     .bottom-nav {
       position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: #090d16;
-      display: flex; justify-comtement: space-around; align-items: center; border-top: 1px solid rgba(255,255,255,0.08); z-index: 50;
+      display: flex; justify-content: space-around; align-items: center; border-top: 1px solid rgba(255,255,255,0.08); z-index: 50;
+      padding: 0 4px;
     }
-    .nav-item { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); font-size: 0.7rem; border: none; background: none; cursor: pointer; }
-    .nav-item i { font-size: 1.2rem; margin-bottom: 3px; }
-    .nav-item.active { color: var(--primary); }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: var(--text-muted); font-size: 0.7rem; border: none; background: none; cursor: pointer; height: 100%;
+    }
+    .nav-item i { font-size: 1.25rem; margin-bottom: 4px; }
+    .nav-item span { line-height: 1; }
+    .nav-item.active { color: var(--primary); font-weight: 700; }
 
     .fab-btn {
       position: fixed; bottom: 80px; right: 20px; width: 52px; height: 52px; border-radius: 50%;
@@ -103,7 +109,7 @@
       font-size: 1.4rem; box-shadow: 0 4px 12px rgba(0,132,255,0.4); border: none; cursor: pointer; z-index: 45;
     }
 
-    /* ESTILOS DE FORMULARIOS Y MODALES ESTILO ORIGINAL */
+    /* ESTILOS DE FORMULARIOS Y MODALES */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); display: none; align-items: flex-end; justify-content: center; z-index: 100; }
     .modal-overlay.active { display: flex; }
     .modal-content { background: #172033; width: 100%; max-width: 600px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 90vh; overflow-y: auto; border-top: 1px solid rgba(255,255,255,0.1); }
@@ -374,13 +380,28 @@
   <!-- BOTÓN FLOTANTE (FAB) -->
   <button class="fab-btn" onclick="handleFabClick()"><i class="fa-solid fa-plus"></i></button>
 
-  <!-- BARRA DE NAVEGACIÓN INFERIOR -->
+  <!-- BARRA DE NAVEGACIÓN INFERIOR (CORREGIDA CON ESTILOS ESTRUCTURADOS) -->
   <nav class="bottom-nav">
-    <button class="nav-item active" onclick="switchMainTab('trips-list')"><i class="fa-solid fa-suitcase"></i><span>Viajes</span></button>
-    <button class="nav-item" onclick="switchMainTab('flight-hub')"><i class="fa-solid fa-chart-pie"></i><span>Flight Hub</span></button>
-    <button class="nav-item" onclick="switchMainTab('map-view')"><i class="fa-solid fa-map-location-dot"></i><span>Mapa</span></button>
-    <button class="nav-item" onclick="switchMainTab('documents')"><i class="fa-solid fa-passport"></i><span>Documentos</span></button>
-    <button class="nav-item" onclick="switchMainTab('settings')"><i class="fa-solid fa-sliders"></i><span>Ajustes</span></button>
+    <button class="nav-item active" onclick="switchMainTab('trips-list')">
+      <i class="fa-solid fa-suitcase"></i>
+      <span>Viajes</span>
+    </button>
+    <button class="nav-item" onclick="switchMainTab('flight-hub')">
+      <i class="fa-solid fa-chart-pie"></i>
+      <span>Flight Hub</span>
+    </button>
+    <button class="nav-item" onclick="switchMainTab('map-view')">
+      <i class="fa-solid fa-map-location-dot"></i>
+      <span>Mapa</span>
+    </button>
+    <button class="nav-item" onclick="switchMainTab('documents')">
+      <i class="fa-solid fa-passport"></i>
+      <span>Documentos</span>
+    </button>
+    <button class="nav-item" onclick="switchMainTab('settings')">
+      <i class="fa-solid fa-sliders"></i>
+      <span>Ajustes</span>
+    </button>
   </nav>
 
   <!-- MODAL DE ELECCIÓN AL PRESIONAR + EN ITINERARIO -->
@@ -400,7 +421,7 @@
     </div>
   </div>
 
-  <!-- MODAL DE FORMULARIO DE VUELO (IDÉNTICO A LA FOTO 2) -->
+  <!-- MODAL DE FORMULARIO DE VUELO -->
   <div id="modal-flight-form" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header-row">
@@ -486,7 +507,7 @@
     </div>
   </div>
 
-  <!-- MODAL DE FORMULARIO DE HOTEL (IDÉNTICO A LA FOTO 3) -->
+  <!-- MODAL DE FORMULARIO DE HOTEL -->
   <div id="modal-hotel-form" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header-row">
@@ -541,7 +562,7 @@
     </div>
   </div>
 
-  <!-- MODAL DE FORMULARIO DE AUTO (IDÉNTICO A LA FOTO 4) -->
+  <!-- MODAL DE FORMULARIO DE AUTO -->
   <div id="modal-car-form" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header-row">
@@ -607,7 +628,7 @@
     </div>
   </div>
 
-  <!-- MODAL DE FORMULARIO DE RESTAURANTE (IDÉNTICO A LA FOTO 5) -->
+  <!-- MODAL DE FORMULARIO DE RESTAURANTE -->
   <div id="modal-restaurant-form" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header-row">
