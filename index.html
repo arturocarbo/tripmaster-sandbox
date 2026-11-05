@@ -829,16 +829,7 @@
           
           <div class="form-group">
             <label>Imagen del Viaje / Portada</label>
-            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
-              <input type="file" id="trip-image-file" accept="image/*" onchange="handleTripImageUpload(event)" style="display:none;">
-              <button type="button" onclick="document.getElementById('trip-image-file').click()" style="flex:1; background:#1e293b; color:#38bdf8; border:1px dashed #0084ff; padding:8px; border-radius:8px; font-size:0.75rem; font-weight:600; cursor:pointer;">
-                📷 Subir foto del celular
-              </button>
-            </div>
-            <input type="text" id="trip-image-url" placeholder="O pega el enlace de una imagen (https://...)" onchange="updateImagePreview(this.value)">
-            <div id="trip-image-preview-box" style="margin-top:8px; display:none; text-align:center;">
-              <img id="trip-image-preview" src="" style="width:100%; height:100px; object-fit:cover; border-radius:8px; border:1px solid var(--card-border);">
-            </div>
+            <input type="text" id="trip-image-url" placeholder="Pega el enlace de una imagen (https://...)">
           </div>
 
           <button type="submit" class="btn-submit">Guardar Viaje</button>
@@ -874,59 +865,12 @@
       </div>
     </div>
 
-    <div class="modal-overlay" id="modal-import-ait">
-      <div class="action-sheet">
-        <div class="sheet-header">
-          <div class="sheet-title">📲 Importar App in the Air</div>
-          <button class="sheet-close" onclick="closeModals()">&times;</button>
-        </div>
-        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
-          Selecciona tu archivo de datos o pega el texto formateado.
-        </div>
-
-        <div style="margin-bottom: 12px;">
-          <button type="button" onclick="document.getElementById('ait-file-input').click()" style="width: 100%; background: #1e293b; color: #38bdf8; border: 1px dashed #0084ff; padding: 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer;">
-            📁 Cargar archivo .txt desde el celular
-          </button>
-          <input type="file" id="ait-file-input" accept=".txt,.data" style="display:none;" onchange="handleAitFileUpload(event)">
-        </div>
-
-        <div class="form-group">
-          <label>O pega el texto extraído aquí:</label>
-          <textarea id="ait-text-input" rows="6" placeholder="trips: ..."></textarea>
-        </div>
-
-        <button type="button" class="btn-submit" onclick="processAitImportText()">Procesar e Importar Vuelos</button>
-      </div>
-    </div>
-
-    <div class="modal-overlay" id="modal-merge-trips">
-      <div class="action-sheet">
-        <div class="sheet-header">
-          <div class="sheet-title">🔗 Fusionar y Unir Viajes</div>
-          <button class="sheet-close" onclick="closeModals()">&times;</button>
-        </div>
-        <div style="font-size:0.8rem; color: var(--text-muted); margin-bottom:12px;">
-          Selecciona dos o más viajes para unirlos en un solo itinerario consolidado.
-        </div>
-
-        <div id="merge-trips-list" style="max-height:220px; overflow-y:auto; margin-bottom:12px;"></div>
-
-        <div class="form-group">
-          <label>Nombre del Viaje Unificado (Opcional):</label>
-          <input type="text" id="merged-trip-name" placeholder="Ej. Gira Internacional 2026-2027">
-        </div>
-
-        <button type="button" class="btn-submit" onclick="executeTripMerge()">Confirmar y Fusionar</button>
-      </div>
-    </div>
-
   </div>
 
-  <!-- ARCHIVOS DE LÓGICA JAVASCRIPT MODULARIZADOS -->
-  <script src="./map.js"></script>
-  <script src="./stats.js"></script>
-  <script src="./app.js"></script>
+  <!-- Carga limpia de Scripts al final de la página -->
+  <script src="./map.js" defer></script>
+  <script src="./stats.js" defer></script>
+  <script src="./app.js" defer></script>
 
 </body>
 </html>
