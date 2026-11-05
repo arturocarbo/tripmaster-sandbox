@@ -17,7 +17,7 @@ const GOOGLE_CLIENT_ID = '3946661722-akjk1dp0slafuu03bdc3hehibbe952og.apps.googl
 let tokenClient = null;
 let driveAccessToken = null;
 
-// BASE DE DATOS LOCAL DE AEROPUERTOS PARA EVITAR BLOQUEOS DE RED API
+// BASE DE DATOS LOCAL DE AEROPUERTOS BASE
 const LOCAL_AIRPORT_DB = {
   'SAL': { name: 'San Salvador', country: 'El Salvador', lat: 13.4409, lng: -89.0557 },
   'SJO': { name: 'San José', country: 'Costa Rica', lat: 9.9938, lng: -84.2088 },
@@ -1168,6 +1168,59 @@ function saveTripForm(e) {
 }
 
 // ==========================================
+// CONSULTA A WIKIDATA CON FALLBACK SEGURO
+// ==========================================
+async function fetchAirportFromWikidata(iata) {
+  const cleanIata = (iata || '').toUpperCase().trim();
+  if (!cleanIata) return null;
+
+  // Si existe en la base de datos local, usarla de inmediato
+  if (LOCAL_AIRPORT_DB[cleanIata]) {
+    return LOCAL_AIRPORT_DB[cleanIata];
+  }
+
+  const sparqlQuery = `
+    SELECT ?item ?itemLabel ?countryLabel ?coord WHERE {
+      ?item wdt:P238 "${cleanIata}".
+      OPTIONAL { ?item wdt:P17 ?country. }
+      OPTIONAL { ?item wdt:P625 ?coord. }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "es,en". }
+    } LIMIT 1
+  `;
+
+  // Controlador de tiempo límite (2 segundos) para no bloquear la app si Wikidata falla
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+  try {
+    const res = await fetch('https://query.wikidata.org/sparql?query=' + encodeURIComponent(sparqlQuery) + '&format=json', {
+      headers: { 'Accept': 'application/sparql-results+json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      const b = data.results?.bindings[0];
+      if (b) {
+        let lat = 0, lng = 0;
+        if (b.coord?.value) {
+          const m = b.coord.value.match(/Point\(([-\d\.]+) ([-\d\.]+)\)/);
+          if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
+        }
+        const result = { name: b.itemLabel?.value || cleanIata, country: b.countryLabel?.value || 'Internacional', lat, lng };
+        LOCAL_AIRPORT_DB[cleanIata] = result; // Guardar en caché local
+        return result;
+      }
+    }
+  } catch (e) {
+    clearTimeout(timeoutId);
+  }
+
+  return null;
+}
+
+// ==========================================
 // FLIGHT HUB, MAPAS Y ESTADÍSTICAS
 // ==========================================
 function setFlightTimeFilter(filterType) {
@@ -1175,12 +1228,6 @@ function setFlightTimeFilter(filterType) {
   document.querySelectorAll('#subview-flighthub-vuelos .pill-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`pill-flight-${filterType}`)?.classList.add('active');
   renderAirFlightsList();
-}
-
-function getAirportCoords(iata) {
-  const code = (iata || '').toUpperCase().trim();
-  if (LOCAL_AIRPORT_DB[code]) return LOCAL_AIRPORT_DB[code];
-  return { name: code, country: 'Global', lat: 0, lng: 0 };
 }
 
 function initFlightMap() {
@@ -1194,7 +1241,8 @@ function initFlightMap() {
   }, 200);
 }
 
-function renderMapGeodesicRoutes() {
+// RENDERIZADO ASÍNCRONO DE RUTAS EN EL MAPA SIN BLOQUEAR EL LOOP DE NAVEGACIÓN
+async function renderMapGeodesicRoutes() {
   if (!flightMap) return;
 
   planeAnimMarkers.forEach(p => flightMap.removeLayer(p.marker));
@@ -1208,6 +1256,8 @@ function renderMapGeodesicRoutes() {
   let totalFlightsCount = 0;
   let airportCounts = {};
   let airlineCounts = {};
+
+  let routePromises = [];
 
   for (let t of trips) {
     for (let i of (t.items || [])) {
@@ -1228,33 +1278,43 @@ function renderMapGeodesicRoutes() {
           if (origIata) airportCounts[origIata] = (airportCounts[origIata] || 0) + 1;
           if (destIata) airportCounts[destIata] = (airportCounts[destIata] || 0) + 1;
 
-          let apOrig = getAirportCoords(origIata);
-          let apDest = getAirportCoords(destIata);
-
-          if (apOrig.lat !== 0 && apDest.lat !== 0) {
-            const startPt = [apOrig.lng, apOrig.lat];
-            const endPt = [apDest.lng, apDest.lat];
-
-            const gcArc = turf.greatCircle(turf.point(startPt), turf.point(endPt), { npoints: 50 });
-            const leafletCoords = gcArc.geometry.coordinates.map(c => [c[1], c[0]]);
-
-            const polylineLayer = L.polyline(leafletCoords, { color: '#0084ff', weight: 3, opacity: 0.8 }).addTo(flightMap);
-            mapPolylines.push(polylineLayer);
-
-            const planeIcon = L.divIcon({
-              html: `<i class="fa-solid fa-plane text-emerald-400 text-sm transform -rotate-45"></i>`,
-              className: 'plane-pin', iconSize: [16, 16]
-            });
-
-            const planeMarker = L.marker(leafletCoords[0], { icon: planeIcon }).addTo(flightMap);
-            planeAnimMarkers.push({ marker: planeMarker, coords: leafletCoords, step: 0 });
-
-            totalMiles += Math.round(turf.distance(turf.point(startPt), turf.point(endPt), { units: 'miles' }));
-          }
+          routePromises.push((async () => {
+            const apOrig = await fetchAirportFromWikidata(origIata);
+            const apDest = await fetchAirportFromWikidata(destIata);
+            return { apOrig, apDest };
+          })());
         }
       }
     }
   }
+
+  const results = await Promise.allSettled(routePromises);
+
+  results.forEach(res => {
+    if (res.status === 'fulfilled' && res.value) {
+      const { apOrig, apDest } = res.value;
+      if (apOrig && apDest && apOrig.lat !== 0 && apDest.lat !== 0) {
+        const startPt = [apOrig.lng, apOrig.lat];
+        const endPt = [apDest.lng, apDest.lat];
+
+        const gcArc = turf.greatCircle(turf.point(startPt), turf.point(endPt), { npoints: 50 });
+        const leafletCoords = gcArc.geometry.coordinates.map(c => [c[1], c[0]]);
+
+        const polylineLayer = L.polyline(leafletCoords, { color: '#0084ff', weight: 3, opacity: 0.8 }).addTo(flightMap);
+        mapPolylines.push(polylineLayer);
+
+        const planeIcon = L.divIcon({
+          html: `<i class="fa-solid fa-plane text-emerald-400 text-sm transform -rotate-45"></i>`,
+          className: 'plane-pin', iconSize: [16, 16]
+        });
+
+        const planeMarker = L.marker(leafletCoords[0], { icon: planeIcon }).addTo(flightMap);
+        planeAnimMarkers.push({ marker: planeMarker, coords: leafletCoords, step: 0 });
+
+        totalMiles += Math.round(turf.distance(turf.point(startPt), turf.point(endPt), { units: 'miles' }));
+      }
+    }
+  });
 
   const distEl = document.getElementById('map-total-distance');
   const countEl = document.getElementById('map-total-flights');
@@ -1288,7 +1348,6 @@ function animatePlanes() {
   animFrameId = requestAnimationFrame(() => { setTimeout(animatePlanes, 100); });
 }
 
-// RENDERIZADO DE VUELOS EN FLIGHT HUB CON ESCALAS UNIFICADAS
 function renderAirFlightsList() {
   const container = document.getElementById('air-flights-list');
   if (!container) return;
@@ -1377,7 +1436,7 @@ function renderAirFlightsList() {
   }
 }
 
-// ESTADÍSTICAS MULTICATEGORÍA SIN BLOQUEO SÍNCRONO
+// ESTADÍSTICAS MULTICATEGORÍA
 function getFilteredTripsForStats() {
   const selectedYear = document.getElementById('stats-year-select')?.value || 'all';
   if (selectedYear === 'all') return trips;
@@ -1457,8 +1516,8 @@ function renderHotelCategoryStats() {
   document.getElementById('hotel-stat-cost').innerText = `$${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 }
 
-// ESTADÍSTICAS DE VUELOS CORREGIDAS
-function renderFlightStats() {
+// RENDERIZADO ASÍNCRONO SEGURO DE ESTADÍSTICAS DE VUELOS
+async function renderFlightStats() {
   let totalFlightCost = 0;
   let totalMiles = 0;
   let totalFlightMinutes = 0;
@@ -1466,6 +1525,7 @@ function renderFlightStats() {
   let airlineSpending = {};
 
   const activeStatsTrips = getFilteredTripsForStats();
+  let distPromises = [];
 
   for (let t of activeStatsTrips) {
     for (let i of (t.items || [])) {
@@ -1493,21 +1553,29 @@ function renderFlightStats() {
           const origIata = parts[0].trim();
           const destIata = parts[1].trim();
 
-          const apOrig = getAirportCoords(origIata);
-          const apDest = getAirportCoords(destIata);
-
-          if (apOrig.lat !== 0 && apDest.lat !== 0) {
-            const distMiles = Math.round(turf.distance(
-              turf.point([apOrig.lng, apOrig.lat]),
-              turf.point([apDest.lng, apDest.lat]),
-              { units: 'miles' }
-            ));
-            totalMiles += distMiles;
-          }
+          distPromises.push((async () => {
+            const apOrig = await fetchAirportFromWikidata(origIata);
+            const apDest = await fetchAirportFromWikidata(destIata);
+            if (apOrig && apDest && apOrig.lat !== 0 && apDest.lat !== 0) {
+              return Math.round(turf.distance(
+                turf.point([apOrig.lng, apOrig.lat]),
+                turf.point([apDest.lng, apDest.lat]),
+                { units: 'miles' }
+              ));
+            }
+            return 0;
+          })());
         }
       }
     }
   }
+
+  const mileResults = await Promise.allSettled(distPromises);
+  mileResults.forEach(res => {
+    if (res.status === 'fulfilled' && typeof res.value === 'number') {
+      totalMiles += res.value;
+    }
+  });
 
   const totalCostEl = document.getElementById('flight-stat-total-cost');
   const milesEl = document.getElementById('stat-miles');
