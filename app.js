@@ -11,11 +11,11 @@ let airlinesChartObj = null;
 let currentTripTimeFilter = 'all';
 let currentFlightTimeFilter = 'all';
 
+let activeSelectedItemId = null;
+
 const GOOGLE_CLIENT_ID = '3946661722-akjk1dp0slafuu03bdc3hehibbe952og.apps.googleusercontent.com';
 let tokenClient = null;
 let driveAccessToken = null;
-
-let activeSelectedItemId = null;
 
 const INITIAL_TRIPS = [
   {
@@ -43,6 +43,7 @@ const DEFAULT_PAYMENT_METHODS = [
 let trips = [];
 let packingItems = [];
 let paymentMethods = [];
+let membershipPrograms = [];
 let currentScreen = 'trips-list';
 let activeTripId = '1';
 
@@ -57,6 +58,7 @@ function saveDataToStorage() {
     localStorage.setItem('tripmaster_trips', JSON.stringify(trips));
     localStorage.setItem('tripmaster_packing', JSON.stringify(packingItems));
     localStorage.setItem('tripmaster_payments', JSON.stringify(paymentMethods));
+    localStorage.setItem('tripmaster_memberships', JSON.stringify(membershipPrograms));
     populateYearDropdowns();
     checkAndPerformAutoBackup();
   } catch (e) { console.error("Error guardando datos:", e); }
@@ -67,6 +69,7 @@ function loadDataFromStorage() {
     const storedTrips = localStorage.getItem('tripmaster_trips');
     const storedPacking = localStorage.getItem('tripmaster_packing');
     const storedPayments = localStorage.getItem('tripmaster_payments');
+    const storedMemberships = localStorage.getItem('tripmaster_memberships');
 
     if (storedTrips) {
       trips = JSON.parse(storedTrips);
@@ -85,8 +88,11 @@ function loadDataFromStorage() {
     if (storedPayments) { paymentMethods = JSON.parse(storedPayments); }
     else { paymentMethods = DEFAULT_PAYMENT_METHODS; }
 
+    if (storedMemberships) { membershipPrograms = JSON.parse(storedMemberships); }
+
     updateLastBackupDisplay();
     renderPaymentMethodsList();
+    renderMembershipsList();
     populateYearDropdowns();
   } catch (e) {
     trips = INITIAL_TRIPS; packingItems = INITIAL_PACKING_ITEMS; paymentMethods = DEFAULT_PAYMENT_METHODS;
@@ -117,7 +123,7 @@ function populateYearDropdowns() {
 
   if (statsSelect) {
     const currStatsVal = statsSelect.value;
-    statsSelect.innerHTML = `<option value="all">Todos</option>`;
+    statsSelect.innerHTML = `<option value="all">📅 Todos los años</option>`;
     sortedYears.forEach(y => { statsSelect.innerHTML += `<option value="${y}">${y}</option>`; });
     if (currStatsVal && Array.from(statsSelect.options).some(o => o.value === currStatsVal)) {
       statsSelect.value = currStatsVal;
@@ -125,37 +131,63 @@ function populateYearDropdowns() {
   }
 }
 
+// ==========================================
 // NAVEGACIÓN Y PANTALLAS
+// ==========================================
+function switchMainTab(screenId) {
+  document.querySelectorAll('.bottom-nav .nav-item').forEach(btn => btn.classList.remove('active'));
+  if (window.event && window.event.currentTarget) {
+    window.event.currentTarget.classList.add('active');
+  }
+
+  showScreen(screenId);
+
+  if (screenId === 'flight-hub') {
+    renderAirFlightsList();
+    renderSelectedCategoryStats();
+  } else if (screenId === 'map-view') {
+    initFlightMap();
+  } else if (screenId === 'documents') {
+    renderMembershipsList();
+    renderPackingList();
+  }
+}
+
 function showScreen(screenId) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const target = document.getElementById(`screen-${screenId}`);
   if (target) target.classList.add('active');
   currentScreen = screenId;
-
-  if (screenId === 'flight-stats') initFlightMap();
 }
 
-function switchTab(screenId, titleName = '') {
-  document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+function switchFlightHubSubtab(subtabId) {
+  document.querySelectorAll('.flight-hub-tab').forEach(b => b.classList.remove('active'));
   if (window.event && window.event.currentTarget) window.event.currentTarget.classList.add('active');
 
-  if (screenId === 'placeholder') {
-    const pTitle = document.getElementById('placeholder-title');
-    if (pTitle) pTitle.innerText = titleName;
-  }
-  showScreen(screenId);
+  document.querySelectorAll('.flighthub-subview').forEach(v => v.style.display = 'none');
+  const target = document.getElementById(`subview-flighthub-${subtabId}`);
+  if (target) target.style.display = 'block';
+
+  if (subtabId === 'vuelos') renderAirFlightsList();
+  else if (subtabId === 'stats') renderSelectedCategoryStats();
+}
+
+function switchDocSubtab(subtabId) {
+  document.querySelectorAll('.doc-subtab').forEach(b => b.classList.remove('active'));
+  if (window.event && window.event.currentTarget) window.event.currentTarget.classList.add('active');
+
+  document.querySelectorAll('.doc-subview').forEach(v => v.style.display = 'none');
+  const target = document.getElementById(`subview-doc-${subtabId}`);
+  if (target) target.style.display = 'block';
+
+  if (subtabId === 'aeropuertos') loadDefaultAirportGuide();
+  else if (subtabId === 'equipaje') renderPackingList();
+  else if (subtabId === 'millas') renderMembershipsList();
 }
 
 function closeModals() {
   document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
-  document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('active'));
 }
-
-window.addEventListener('click', (e) => {
-  if (!e.target.closest('.dropdown-menu') && !e.target.closest('.action-icon-btn')) {
-    closeModals();
-  }
-});
 
 function handleFabClick() {
   if (currentScreen === 'trips-list') {
@@ -168,7 +200,56 @@ function handleFabClick() {
   }
 }
 
+// ==========================================
+// MEMBRESÍAS Y MILLAS
+// ==========================================
+function saveMembershipProgram(e) {
+  e.preventDefault();
+  const airline = document.getElementById('member-airline').value.trim();
+  const number = document.getElementById('member-number').value.trim();
+  const miles = parseInt(document.getElementById('member-miles').value) || 0;
+
+  membershipPrograms.push({ id: 'mem-' + Date.now(), airline, number, miles });
+  saveDataToStorage();
+  renderMembershipsList();
+  e.target.reset();
+}
+
+function renderMembershipsList() {
+  const container = document.getElementById('memberships-list-container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (membershipPrograms.length === 0) {
+    container.innerHTML = `<div style="text-align:center; padding:20px; color:#94a3b8; font-size:0.8rem;">No hay programas registrados. Añade uno arriba.</div>`;
+    return;
+  }
+
+  membershipPrograms.forEach(mem => {
+    container.innerHTML += `
+      <div class="dark-card" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-weight:700; color:#fff; font-size:0.9rem;">${mem.airline}</div>
+          <div style="font-size:0.75rem; color:#94a3b8;">Socio N°: <b style="color:#cbd5e1;">${mem.number}</b></div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:0.9rem; font-weight:800; color:#ffb703;">${mem.miles.toLocaleString()} mi</div>
+          <button onclick="deleteMembership('${mem.id}')" style="background:none; border:none; color:#ef4444; font-size:0.75rem; cursor:pointer; margin-top:2px;">Eliminar</button>
+        </div>
+      </div>
+    `;
+  });
+}
+
+function deleteMembership(id) {
+  membershipPrograms = membershipPrograms.filter(m => m.id !== id);
+  saveDataToStorage();
+  renderMembershipsList();
+}
+
+// ==========================================
 // RENDERIZADO DE VIAJES E ITINERARIO
+// ==========================================
 function filterTripsList() {
   const query = document.getElementById('trip-search-input')?.value.toLowerCase() || '';
   renderTrips(query);
@@ -177,8 +258,7 @@ function filterTripsList() {
 function setTripTimeFilter(filterType) {
   currentTripTimeFilter = filterType;
   document.querySelectorAll('#screen-trips-list .pill-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById(`pill-trip-${filterType}`);
-  if (btn) btn.classList.add('active');
+  document.getElementById(`pill-trip-${filterType}`)?.classList.add('active');
   filterTripsList();
 }
 
@@ -210,9 +290,7 @@ function renderTrips(filterQuery = '') {
     if (currentTripTimeFilter === 'upcoming' && startDate < now) return false;
     if (currentTripTimeFilter === 'past' && startDate >= now) return false;
 
-    if (selectedYear !== 'all') {
-      if (startDate.getFullYear().toString() !== selectedYear) return false;
-    }
+    if (selectedYear !== 'all' && startDate.getFullYear().toString() !== selectedYear) return false;
     return true;
   });
 
@@ -364,16 +442,15 @@ function renderTimeline() {
   }
 }
 
-// FORMULARIOS Y GESTIÓN DE EVENTOS DEL ITINERARIO
+// ==========================================
+// MODALES Y FORMULARIOS DE ELEMENTOS
+// ==========================================
 function openItemDetailsModal(itemId) {
   activeSelectedItemId = itemId;
   const trip = trips.find(t => t.id === activeTripId);
   if (!trip) return;
   const item = trip.items.find(i => i.id === itemId);
   if (!item) return;
-
-  const titleEl = document.getElementById('item-detail-title');
-  if (titleEl) titleEl.innerText = item.title;
 
   let html = `
     <div style="background:#1e293b; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.1);">
@@ -466,28 +543,9 @@ function editActiveItem() {
     document.getElementById('modal-flight-form').classList.add('active');
   } else if (item.type === 'hotel') {
     openHotelForm(item);
-  } else if (item.type === 'car') {
-    openCarForm(item);
-  } else if (item.type === 'food') {
-    openRestaurantForm(item);
-  } else {
-    document.getElementById('generic-edit-item-id').value = item.id;
-    document.getElementById('generic-item-type').value = item.type;
-    document.getElementById('generic-form-title').innerText = `✏ Editar ${item.type}`;
-    document.getElementById('generic-title').value = item.title;
-    document.getElementById('generic-sub').value = item.subtitle || '';
-    document.getElementById('generic-payment-method').value = item.paymentMethodId || '';
-
-    if (item.timestamp) {
-      const dt = new Date(item.timestamp);
-      document.getElementById('generic-time').value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-    }
-
-    document.getElementById('modal-generic-form').classList.add('active');
   }
 }
 
-// RESTAURANTE, HOTEL, VUELO Y AUTO FORMS
 function openHotelForm(existingItem = null) {
   closeModals();
   populatePaymentSelectors();
@@ -632,283 +690,6 @@ function saveAdvancedHotel(e) {
   e.target.reset();
 }
 
-function openCarForm(existingItem = null) {
-  closeModals();
-  populatePaymentSelectors();
-  const formTitle = document.getElementById('car-form-modal-title');
-  const editIdInput = document.getElementById('edit-car-item-id');
-  const compInput = document.getElementById('car-company');
-  const modelInput = document.getElementById('car-model');
-  const pickupInput = document.getElementById('car-pickup');
-  const dropoffInput = document.getElementById('car-dropoff');
-  const costInput = document.getElementById('car-cost');
-  const currInput = document.getElementById('car-currency');
-  const payInput = document.getElementById('car-payment-method');
-  const locInput = document.getElementById('car-location');
-  const codeInput = document.getElementById('car-code');
-
-  if (existingItem) {
-    formTitle.innerText = '✏ Editar Alquiler de Auto';
-    editIdInput.value = existingItem.carGroupId || existingItem.id;
-    compInput.value = existingItem.carCompany || '';
-    modelInput.value = existingItem.carModel || '';
-
-    if (existingItem.carPickupTimestamp || existingItem.timestamp) {
-      const dt = new Date(existingItem.carPickupTimestamp || existingItem.timestamp);
-      pickupInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-    }
-    if (existingItem.carDropoffTimestamp || existingItem.arrTimestamp) {
-      const dt = new Date(existingItem.carDropoffTimestamp || existingItem.arrTimestamp);
-      dropoffInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-    }
-
-    costInput.value = existingItem.carCost || '';
-    currInput.value = existingItem.carCurrency || 'USD';
-    payInput.value = existingItem.paymentMethodId || '';
-    locInput.value = existingItem.carLocation || '';
-    codeInput.value = existingItem.carCode || '';
-  } else {
-    formTitle.innerText = '🚗 Alquiler de Vehículo';
-    editIdInput.value = '';
-    compInput.value = '';
-    modelInput.value = '';
-    pickupInput.value = '';
-    dropoffInput.value = '';
-    costInput.value = '';
-    currInput.value = 'USD';
-    payInput.value = '';
-    locInput.value = '';
-    codeInput.value = '';
-  }
-
-  document.getElementById('modal-car-form').classList.add('active');
-}
-
-function saveAdvancedCar(e) {
-  e.preventDefault();
-  const editGroupId = document.getElementById('edit-car-item-id').value;
-  const company = document.getElementById('car-company').value.trim();
-  const model = document.getElementById('car-model').value.trim();
-  const pickupVal = document.getElementById('car-pickup').value;
-  const dropoffVal = document.getElementById('car-dropoff').value;
-  const costVal = parseFloat(document.getElementById('car-cost').value) || 0;
-  const currencyVal = document.getElementById('car-currency').value;
-  const paymentVal = document.getElementById('car-payment-method').value;
-  const locationVal = document.getElementById('car-location').value.trim();
-  const codeVal = document.getElementById('car-code').value.trim();
-
-  const pickupDt = new Date(pickupVal);
-  const dropoffDt = new Date(dropoffVal);
-  const pickupTimestamp = pickupDt.getTime();
-  const dropoffTimestamp = dropoffDt.getTime();
-
-  const diffMs = dropoffTimestamp - pickupTimestamp;
-  const days = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
-
-  const pickupTimeStr = pickupDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const pickupDayStr = pickupDt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
-
-  const dropoffTimeStr = dropoffDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dropoffDayStr = dropoffDt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
-
-  let detailsPickup = [`Vehículo: ${model}`, `Alquiler Total: ${days} ${days === 1 ? 'día' : 'días'}`];
-  if (costVal > 0) detailsPickup.push(`Costo Total: ${costVal.toFixed(2)} ${currencyVal}`);
-  if (paymentVal) {
-    const payLbl = getPaymentMethodLabel(paymentVal);
-    if (payLbl) detailsPickup.push(`Pago: ${payLbl}`);
-  }
-  if (locationVal) detailsPickup.push(`Oficina / Retiro: ${locationVal}`);
-  if (codeVal) detailsPickup.push(`Código Reserva: ${codeVal}`);
-
-  let detailsDropoff = [`Vehículo: ${model}`, `Devolución tras ${days} ${days === 1 ? 'día' : 'días'}`];
-  if (locationVal) detailsDropoff.push(`Oficina Devolución: ${locationVal}`);
-
-  const groupId = editGroupId || ('car-group-' + Date.now());
-  const activeTrip = trips.find(t => t.id === activeTripId);
-
-  if (activeTrip) {
-    if (editGroupId) {
-      activeTrip.items = activeTrip.items.filter(i => i.carGroupId !== editGroupId && i.id !== editGroupId);
-    }
-
-    activeTrip.items.push({
-      id: groupId + '-pickup',
-      carGroupId: groupId,
-      timestamp: pickupTimestamp,
-      arrTimestamp: dropoffTimestamp,
-      carPickupTimestamp: pickupTimestamp,
-      carDropoffTimestamp: dropoffTimestamp,
-      dayLabel: pickupDayStr,
-      time: pickupTimeStr,
-      tz: 'LOCAL',
-      type: 'car',
-      title: `Retiro: ${company}`,
-      status: 'Retiro',
-      subtitle: `${model} (${days} ${days === 1 ? 'día' : 'días'})`,
-      details: detailsPickup,
-      carCost: costVal,
-      carCurrency: currencyVal,
-      paymentMethodId: paymentVal,
-      carCompany: company,
-      carModel: model,
-      carLocation: locationVal,
-      carCode: codeVal
-    });
-
-    activeTrip.items.push({
-      id: groupId + '-dropoff',
-      carGroupId: groupId,
-      timestamp: dropoffTimestamp,
-      arrTimestamp: dropoffTimestamp,
-      carPickupTimestamp: pickupTimestamp,
-      carDropoffTimestamp: dropoffTimestamp,
-      dayLabel: dropoffDayStr,
-      time: dropoffTimeStr,
-      tz: 'LOCAL',
-      type: 'car',
-      title: `Devolución: ${company}`,
-      status: 'Devolución',
-      subtitle: `Entrega de ${model}`,
-      details: detailsDropoff,
-      carCost: costVal,
-      carCurrency: currencyVal,
-      paymentMethodId: paymentVal,
-      carCompany: company,
-      carModel: model,
-      carLocation: locationVal,
-      carCode: codeVal
-    });
-
-    saveDataToStorage();
-    renderTimeline();
-  }
-
-  closeModals();
-  e.target.reset();
-}
-
-function openRestaurantForm(existingItem = null) {
-  closeModals();
-  populatePaymentSelectors();
-  const formTitle = document.getElementById('restaurant-form-modal-title');
-  const editIdInput = document.getElementById('edit-restaurant-item-id');
-  const nameInput = document.getElementById('restaurant-name');
-  const timeInput = document.getElementById('restaurant-time');
-  const peopleInput = document.getElementById('restaurant-people');
-  const costInput = document.getElementById('restaurant-cost');
-  const currInput = document.getElementById('restaurant-currency');
-  const payInput = document.getElementById('restaurant-payment-method');
-  const addrInput = document.getElementById('restaurant-address');
-  const notesInput = document.getElementById('restaurant-notes');
-
-  if (existingItem) {
-    formTitle.innerText = '✏ Editar Reserva / Factura de Restaurante';
-    editIdInput.value = existingItem.id;
-    nameInput.value = existingItem.restaurantName || existingItem.title || '';
-
-    if (existingItem.timestamp) {
-      const dt = new Date(existingItem.timestamp);
-      timeInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-    }
-
-    peopleInput.value = existingItem.restaurantPeople || '';
-    costInput.value = existingItem.restaurantCost || '';
-    currInput.value = existingItem.restaurantCurrency || 'USD';
-    payInput.value = existingItem.paymentMethodId || '';
-    addrInput.value = existingItem.restaurantAddress || '';
-    notesInput.value = existingItem.restaurantNotes || '';
-  } else {
-    formTitle.innerText = '🍽 Reserva & Factura de Restaurante';
-    editIdInput.value = '';
-    nameInput.value = '';
-    timeInput.value = '';
-    peopleInput.value = '';
-    costInput.value = '';
-    currInput.value = 'USD';
-    payInput.value = '';
-    addrInput.value = '';
-    notesInput.value = '';
-  }
-
-  document.getElementById('modal-restaurant-form').classList.add('active');
-}
-
-function saveAdvancedRestaurant(e) {
-  e.preventDefault();
-  const editItemId = document.getElementById('edit-restaurant-item-id').value;
-  const name = document.getElementById('restaurant-name').value.trim();
-  const timeVal = document.getElementById('restaurant-time').value;
-  const peopleVal = document.getElementById('restaurant-people').value.trim();
-  const costVal = parseFloat(document.getElementById('restaurant-cost').value) || 0;
-  const currencyVal = document.getElementById('restaurant-currency').value;
-  const paymentVal = document.getElementById('restaurant-payment-method').value;
-  const addressVal = document.getElementById('restaurant-address').value.trim();
-  const notesVal = document.getElementById('restaurant-notes').value.trim();
-
-  const dt = new Date(timeVal);
-  const timestamp = dt.getTime();
-  const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dayStr = dt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
-
-  let detailsArr = [];
-  if (peopleVal) detailsArr.push(`Mesa / Asistentes: ${peopleVal}`);
-  if (costVal > 0) detailsArr.push(`Factura / Presupuesto: ${costVal.toFixed(2)} ${currencyVal}`);
-  if (paymentVal) {
-    const payLbl = getPaymentMethodLabel(paymentVal);
-    if (payLbl) detailsArr.push(`Pago: ${payLbl}`);
-  }
-  if (addressVal) detailsArr.push(`Ubicación: ${addressVal}`);
-  if (notesVal) detailsArr.push(`Notas: ${notesVal}`);
-
-  const activeTrip = trips.find(t => t.id === activeTripId);
-  if (activeTrip) {
-    if (editItemId) {
-      const existingItem = activeTrip.items.find(i => i.id === editItemId);
-      if (existingItem) {
-        existingItem.timestamp = timestamp;
-        existingItem.dayLabel = dayStr;
-        existingItem.time = timeStr;
-        existingItem.title = name;
-        existingItem.subtitle = peopleVal || 'Reserva Gastronómica';
-        existingItem.details = detailsArr;
-        existingItem.restaurantName = name;
-        existingItem.restaurantPeople = peopleVal;
-        existingItem.restaurantCost = costVal;
-        existingItem.restaurantCurrency = currencyVal;
-        existingItem.paymentMethodId = paymentVal;
-        existingItem.restaurantAddress = addressVal;
-        existingItem.restaurantNotes = notesVal;
-      }
-    } else {
-      activeTrip.items.push({
-        id: 'item-' + Date.now(),
-        timestamp: timestamp,
-        dayLabel: dayStr,
-        time: timeStr,
-        tz: 'LOCAL',
-        type: 'food',
-        title: name,
-        status: 'Confirmado',
-        subtitle: peopleVal || 'Reserva Gastronómica',
-        details: detailsArr,
-        restaurantName: name,
-        restaurantPeople: peopleVal,
-        restaurantCost: costVal,
-        restaurantCurrency: currencyVal,
-        paymentMethodId: paymentVal,
-        restaurantAddress: addressVal,
-        restaurantNotes: notesVal
-      });
-    }
-
-    saveDataToStorage();
-    renderTimeline();
-  }
-
-  closeModals();
-  e.target.reset();
-}
-
 function openFlightForm() {
   closeModals();
   populatePaymentSelectors();
@@ -1015,73 +796,6 @@ function saveAdvancedFlight(e) {
   e.target.reset();
 }
 
-function openGenericForm(type, titleText) {
-  closeModals();
-  populatePaymentSelectors();
-  document.getElementById('generic-edit-item-id').value = '';
-  document.getElementById('generic-item-type').value = type;
-  document.getElementById('generic-form-title').innerText = titleText;
-  document.getElementById('generic-payment-method').value = '';
-  document.getElementById('modal-generic-form').classList.add('active');
-}
-
-function saveGenericItem(e) {
-  e.preventDefault();
-  const editItemId = document.getElementById('generic-edit-item-id').value;
-  const type = document.getElementById('generic-item-type').value;
-  const title = document.getElementById('generic-title').value;
-  const datetime = document.getElementById('generic-time').value;
-  const sub = document.getElementById('generic-sub').value;
-  const paymentVal = document.getElementById('generic-payment-method').value;
-
-  const dt = new Date(datetime);
-  const timestamp = dt.getTime();
-  const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dayStr = dt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
-
-  let detailsArr = [];
-  if (paymentVal) {
-    const payLbl = getPaymentMethodLabel(paymentVal);
-    if (payLbl) detailsArr.push(`Pago: ${payLbl}`);
-  }
-
-  const activeTrip = trips.find(t => t.id === activeTripId);
-  if (activeTrip) {
-    if (editItemId) {
-      const existingItem = activeTrip.items.find(i => i.id === editItemId);
-      if (existingItem) {
-        existingItem.timestamp = timestamp;
-        existingItem.dayLabel = dayStr;
-        existingItem.time = timeStr;
-        existingItem.title = title;
-        existingItem.subtitle = sub;
-        existingItem.paymentMethodId = paymentVal;
-        existingItem.details = detailsArr;
-      }
-    } else {
-      activeTrip.items.push({
-        id: 'item-' + Date.now(),
-        timestamp: timestamp,
-        dayLabel: dayStr,
-        time: timeStr,
-        tz: 'LOCAL',
-        type: type,
-        title: title,
-        status: 'Confirmado',
-        subtitle: sub,
-        paymentMethodId: paymentVal,
-        details: detailsArr
-      });
-    }
-    saveDataToStorage();
-    renderTimeline();
-  }
-
-  closeModals();
-  e.target.reset();
-}
-
-// CREACIÓN Y EDICIÓN DE VIAJES
 function openModalNewTrip() {
   closeModals();
   document.getElementById('edit-trip-id').value = '';
@@ -1091,8 +805,6 @@ function openModalNewTrip() {
   document.getElementById('trip-start-input').value = '';
   document.getElementById('trip-end-input').value = '';
   document.getElementById('trip-image-url').value = '';
-  document.getElementById('trip-image-file').value = '';
-  updateImagePreview('');
   document.getElementById('modal-new-trip').classList.add('active');
 }
 
@@ -1119,7 +831,7 @@ function saveTripForm(e) {
     const newTrip = {
       id: Date.now().toString(),
       title: name,
-      dates: `${start} – ${end}`,
+      dates: start && end ? `${start} – ${end}` : 'En definición',
       daysCount: 'Próximamente',
       daysToGo: 'en agenda',
       image: imageUrl || defaultImg,
@@ -1132,90 +844,13 @@ function saveTripForm(e) {
   closeModals();
 }
 
-function editCurrentTrip() {
-  closeModals();
-  const trip = trips.find(t => t.id === activeTripId);
-  if (!trip) return;
-  document.getElementById('edit-trip-id').value = trip.id;
-  document.getElementById('modal-trip-title').innerText = 'Editar Viaje';
-  document.getElementById('trip-name-input').value = trip.title;
-  document.getElementById('trip-dest-input').value = trip.title;
-  document.getElementById('trip-image-url').value = trip.image || '';
-  document.getElementById('trip-image-file').value = '';
-  updateImagePreview(trip.image || '');
-  document.getElementById('modal-new-trip').classList.add('active');
-}
-
-function askDeleteCurrentTrip() {
-  closeModals();
-  const trip = trips.find(t => t.id === activeTripId);
-  if (!trip) return;
-  document.getElementById('delete-trip-msg').innerText = `Se eliminará el viaje "${trip.title}" y todos sus itinerarios registrados.`;
-  document.getElementById('modal-confirm-delete').classList.add('active');
-}
-
-function confirmDeleteTrip() {
-  trips = trips.filter(t => t.id !== activeTripId);
-  saveDataToStorage();
-  renderTrips();
-  closeModals();
-  showScreen('trips-list');
-}
-
-function shareActiveTrip() {
-  const trip = trips.find(t => t.id === activeTripId);
-  if (!trip) return;
-  if (navigator.share) {
-    navigator.share({ title: trip.title, text: `Echa un vistazo a mi itinerario de viaje: ${trip.title}` });
-  } else {
-    alert(`Enlace copiado al portapapeles.`);
-  }
-}
-
-function handleTripImageUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const base64Img = e.target.result;
-    document.getElementById('trip-image-url').value = base64Img;
-    updateImagePreview(base64Img);
-  };
-  reader.readAsDataURL(file);
-}
-
-function updateImagePreview(src) {
-  const previewBox = document.getElementById('trip-image-preview-box');
-  const previewImg = document.getElementById('trip-image-preview');
-  if (src && src.trim()) {
-    previewImg.src = src;
-    previewBox.style.display = 'block';
-  } else {
-    previewBox.style.display = 'none';
-  }
-}
-
+// ==========================================
 // FLIGHT HUB, MAPAS Y ESTADÍSTICAS
-function switchFlightTab(subtabId) {
-  document.querySelectorAll('.flight-tab-btn').forEach(b => b.classList.remove('active'));
-  if (window.event && window.event.currentTarget) window.event.currentTarget.classList.add('active');
-
-  document.querySelectorAll('.flight-subview').forEach(v => v.classList.remove('active'));
-  const target = document.getElementById(`subview-${subtabId}`);
-  if (target) target.classList.add('active');
-
-  if (subtabId === 'mapa') initFlightMap();
-  else if (subtabId === 'vuelos') renderAirFlightsList();
-  else if (subtabId === 'stats') renderSelectedCategoryStats();
-  else if (subtabId === 'aeropuertos') loadDefaultAirportGuide();
-  else if (subtabId === 'equipaje') renderPackingList();
-}
-
+// ==========================================
 function setFlightTimeFilter(filterType) {
   currentFlightTimeFilter = filterType;
-  document.querySelectorAll('#subview-vuelos .pill-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById(`pill-flight-${filterType}`);
-  if (btn) btn.classList.add('active');
+  document.querySelectorAll('#subview-flighthub-vuelos .pill-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`pill-flight-${filterType}`)?.classList.add('active');
   renderAirFlightsList();
 }
 
@@ -1246,7 +881,7 @@ async function renderMapGeodesicRoutes() {
   let airlineCounts = {};
 
   for (let t of trips) {
-    for (let i of t.items) {
+    for (let i of (t.items || [])) {
       if (i.type === 'flight') {
         totalFlightsCount++;
 
@@ -1292,33 +927,25 @@ async function renderMapGeodesicRoutes() {
     }
   }
 
-  document.getElementById('map-total-distance').innerText = `${totalMiles.toLocaleString()} mi`;
-  document.getElementById('map-total-flights').innerText = totalFlightsCount.toString();
+  const distEl = document.getElementById('map-total-distance');
+  const countEl = document.getElementById('map-total-flights');
+  if (distEl) distEl.innerText = `${totalMiles.toLocaleString()} mi`;
+  if (countEl) countEl.innerText = totalFlightsCount.toString();
 
   const sortedAirports = Object.entries(airportCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const airportsUl = document.getElementById('map-top-airports');
-  if (sortedAirports.length > 0) {
-    airportsUl.innerHTML = sortedAirports.map(([iata, count], index) => `
-      <li class="top-list-item">
-        <span><b>#${index + 1}</b> ${iata}</span>
-        <span class="top-list-badge">${count} ${count === 1 ? 'visita' : 'visitas'}</span>
-      </li>
-    `).join('');
-  } else {
-    airportsUl.innerHTML = `<li class="top-list-item" style="color:#94a3b8;">Sin aeropuertos registrados</li>`;
+  if (airportsUl) {
+    airportsUl.innerHTML = sortedAirports.length > 0 
+      ? sortedAirports.map(([iata, count], index) => `<li class="top-list-item"><span><b>#${index + 1}</b> ${iata}</span><span class="top-list-badge">${count} visitas</span></li>`).join('')
+      : `<li class="top-list-item" style="color:#94a3b8;">Sin aeropuertos registrados</li>`;
   }
 
   const sortedAirlines = Object.entries(airlineCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const airlinesUl = document.getElementById('map-top-airlines');
-  if (sortedAirlines.length > 0) {
-    airlinesUl.innerHTML = sortedAirlines.map(([airline, count], index) => `
-      <li class="top-list-item">
-        <span><b>#${index + 1}</b> ${airline}</span>
-        <span class="top-list-badge">${count} ${count === 1 ? 'vuelo' : 'vuelos'}</span>
-      </li>
-    `).join('');
-  } else {
-    airlinesUl.innerHTML = `<li class="top-list-item" style="color:#94a3b8;">Sin aerolíneas registradas</li>`;
+  if (airlinesUl) {
+    airlinesUl.innerHTML = sortedAirlines.length > 0
+      ? sortedAirlines.map(([airline, count], index) => `<li class="top-list-item"><span><b>#${index + 1}</b> ${airline}</span><span class="top-list-badge">${count} vuelos</span></li>`).join('')
+      : `<li class="top-list-item" style="color:#94a3b8;">Sin aerolíneas registradas</li>`;
   }
 
   animatePlanes();
@@ -1348,80 +975,19 @@ function renderAirFlightsList() {
       tripFlights = tripFlights.filter(f => (f.timestamp || 0) < now.getTime());
     }
 
-    if (tripFlights.length > 0) {
-      let groups = [];
-      let currentGroup = [tripFlights[0]];
-
-      for (let i = 0; i < tripFlights.length - 1; i++) {
-        const curr = tripFlights[i];
-        const next = tripFlights[i + 1];
-        const currDest = curr.title ? curr.title.split('–')[1]?.trim() : '';
-        const nextOrigin = next.title ? next.title.split('–')[0]?.trim() : '';
-
-        let timeDiffMs = (next.timestamp && curr.arrTimestamp) ? (next.timestamp - curr.arrTimestamp) : 0;
-        const isDirectConnection = (currDest && nextOrigin && currDest === nextOrigin && timeDiffMs < 18 * 3600 * 1000);
-
-        if (isDirectConnection) {
-          currentGroup.push(next);
-        } else {
-          groups.push(currentGroup);
-          currentGroup = [next];
-        }
-      }
-      if (currentGroup.length > 0 && !groups.includes(currentGroup)) {
-        groups.push(currentGroup);
-      }
-
-      groups.forEach(group => {
-        flightCount++;
-        const firstFlight = group[0];
-        const lastFlight = group[group.length - 1];
-
-        const startCity = firstFlight.title ? firstFlight.title.split('–')[0]?.trim() : 'Origen';
-        const endCity = lastFlight.title ? lastFlight.title.split('–')[1]?.trim() : 'Destino';
-        const routeTitle = `${startCity} — ${endCity}`;
-
-        let flightsHtml = '';
-        group.forEach(f => {
-          const parts = f.title ? f.title.split('–') : ['', ''];
-          const fOrig = parts[0]?.trim() || '';
-          const fDest = parts[1]?.trim() || '';
-          flightsHtml += `
-            <div style="margin-bottom: 8px; border-left: 2px solid var(--primary); padding-left: 8px;">
-              <div style="font-size:0.8rem; font-weight:700; color:#fff;">${f.subtitle || 'Vuelo'} (${fOrig} — ${fDest})</div>
-              <div style="font-size:0.75rem; color:#94a3b8;">📅 ${f.dayLabel} • ${f.time}</div>
-            </div>
-          `;
-        });
-
-        let tripDurationHtml = '';
-        const lastArr = lastFlight.arrTimestamp || lastFlight.timestamp;
-        const totalMs = lastArr - firstFlight.timestamp;
-        if (totalMs > 0) {
-          const totalMins = Math.floor(totalMs / (1000 * 60));
-          const dh = Math.floor(totalMins / 60);
-          const dm = totalMins % 60;
-          tripDurationHtml = `
-            <div class="trip-duration-footer">
-              <i class="fa-regular fa-clock"></i> Duración del trayecto: ${dh} h ${dm > 0 ? dm + ' min' : ''}
-            </div>
-          `;
-        }
-
-        container.innerHTML += `
-          <div class="air-flight-card">
-            <div class="air-flight-header">
-              <div class="air-flight-route">${routeTitle}</div>
-              <span class="air-flight-badge">${t.title}</span>
-            </div>
-            <div style="margin-top: 8px;">
-              ${flightsHtml}
-            </div>
-            ${tripDurationHtml}
+    tripFlights.forEach(f => {
+      flightCount++;
+      container.innerHTML += `
+        <div class="dark-card" style="margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:700; color:#fff; font-size:0.95rem;">${f.title}</div>
+            <span style="font-size:0.7rem; background:rgba(0,132,255,0.2); color:#0084ff; padding:2px 6px; border-radius:6px; font-weight:700;">${t.title}</span>
           </div>
-        `;
-      });
-    }
+          <div style="font-size:0.8rem; color:#94a3b8; margin-top:2px;">${f.subtitle || 'Vuelo'}</div>
+          <div style="font-size:0.75rem; color:#38bdf8; margin-top:4px;">📅 ${f.dayLabel} • ${f.time}</div>
+        </div>
+      `;
+    });
   });
 
   if (flightCount === 0) {
@@ -1429,178 +995,32 @@ function renderAirFlightsList() {
   }
 }
 
-// CONSULTA DE WIKIDATA Y CLIMA PARA AEROPUERTOS EN VIVO
 async function fetchAirportFromWikidata(iata) {
   const cleanIata = iata.toUpperCase().trim();
   const sparqlQuery = `
-    SELECT ?item ?itemLabel ?countryLabel ?coord ?loungeLabel ?voltage ?plugLabel WHERE {
+    SELECT ?item ?itemLabel ?countryLabel ?coord WHERE {
       ?item wdt:P238 "${cleanIata}".
       OPTIONAL { ?item wdt:P17 ?country. }
       OPTIONAL { ?item wdt:P625 ?coord. }
-      OPTIONAL { ?item wdt:P137 ?lounge. }
-      OPTIONAL { ?country wdt:P2884 ?voltage. }
-      OPTIONAL { ?country wdt:P2852 ?plug. }
       SERVICE wikibase:label { bd:serviceParam wikibase:language "es,en". }
     } LIMIT 1
   `;
-  
-  const endpointUrl = 'https://query.wikidata.org/sparql?query=' + encodeURIComponent(sparqlQuery) + '&format=json';
-  
   try {
-    const res = await fetch(endpointUrl, { headers: { 'Accept': 'application/sparql-results+json' } });
+    const res = await fetch('https://query.wikidata.org/sparql?query=' + encodeURIComponent(sparqlQuery) + '&format=json', { headers: { 'Accept': 'application/sparql-results+json' } });
     if (res.ok) {
       const data = await res.json();
-      const bindings = data.results?.bindings;
-      if (bindings && bindings.length > 0) {
-        const b = bindings[0];
+      const b = data.results?.bindings[0];
+      if (b) {
         let lat = 0, lng = 0;
         if (b.coord?.value) {
-          const matches = b.coord.value.match(/Point\(([-\d\.]+) ([-\d\.]+)\)/);
-          if (matches) { lng = parseFloat(matches[1]); lat = parseFloat(matches[2]); }
+          const m = b.coord.value.match(/Point\(([-\d\.]+) ([-\d\.]+)\)/);
+          if (m) { lng = parseFloat(m[1]); lat = parseFloat(m[2]); }
         }
-
-        return {
-          name: b.itemLabel?.value || `Aeropuerto (${cleanIata})`,
-          country: b.countryLabel?.value || 'Internacional',
-          lat: lat,
-          lng: lng,
-          lounges: b.loungeLabel?.value ? `Operado por ${b.loungeLabel.value}` : `Salas VIP y Salones de la Terminal ${cleanIata}`,
-          plugs: b.voltage?.value ? `${b.voltage.value}V ${b.plugLabel?.value ? '(' + b.plugLabel.value + ')' : ''}` : `Estándar eléctrico local de ${b.countryLabel?.value || 'la región'}`,
-          wifi: `Red Wi-Fi oficial del Aeropuerto ${cleanIata}`,
-          transport: `Acceso por Taxi, Servicios de Rideshare y Conexiones Urbanas en ${b.countryLabel?.value || cleanIata}`
-        };
+        return { name: b.itemLabel?.value || cleanIata, country: b.countryLabel?.value || 'Internacional', lat, lng };
       }
     }
-  } catch (e) { console.error("Error consultando Wikidata:", e); }
-
-  try {
-    const osmRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=airport+${cleanIata}`);
-    const osmData = await osmRes.json();
-    if (osmData && osmData.length > 0) {
-      const rawName = osmData[0].display_name.split(',')[0];
-      const countryPart = osmData[0].display_name.split(',').pop().trim();
-      return {
-        name: rawName,
-        country: countryPart,
-        lat: parseFloat(osmData[0].lat),
-        lng: parseFloat(osmData[0].lon),
-        lounges: `Salas VIP pertenecientes a ${rawName}`,
-        plugs: `Estándar eléctrico oficial de ${countryPart}`,
-        wifi: `Wi-Fi disponible en Terminal Central (${cleanIata})`,
-        transport: `Taxis, Transfers y Rideshare en ${countryPart}`
-      };
-    }
-  } catch (err) {}
-
-  return null;
-}
-
-async function fetchLiveWeather(lat, lng) {
-  if (!lat && !lng) return { tempC: '--', wind: '--' };
-  try {
-    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`);
-    const data = await res.json();
-    if (data && data.current_weather) return { tempC: Math.round(data.current_weather.temperature), wind: Math.round(data.current_weather.windspeed) };
-  } catch (err) {}
-  return { tempC: '--', wind: '--' };
-}
-
-async function fetchWikipediaSummary(name) {
-  try {
-    const res = await fetch(`https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.extract) return data.extract.length > 220 ? data.extract.substring(0, 220) + '...' : data.extract;
-    }
   } catch (e) {}
-  return "Terminal de transporte aéreo internacional.";
-}
-
-async function generateAirportCardHtml(iata) {
-  let ap = await fetchAirportFromWikidata(iata);
-  if (!ap) return `<div class="dark-card" style="text-align:center; color:#94a3b8;">No se encontró información para "${iata}".</div>`;
-
-  const weather = await fetchLiveWeather(ap.lat, ap.lng);
-  const wikiSummary = await fetchWikipediaSummary(ap.name);
-
-  return `
-    <div class="dark-card" style="margin-bottom:12px;">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-        <div>
-          <div style="font-size:0.7rem; font-weight:700; color:#0084ff; text-transform:uppercase;">${ap.country}</div>
-          <div style="font-weight:800; font-size:1rem; color:#fff; line-height:1.2;">${ap.name}</div>
-        </div>
-        <span style="background:rgba(0,132,255,0.2); color:#0084ff; font-weight:800; font-size:0.9rem; padding:3px 8px; border-radius:8px;">${iata}</span>
-      </div>
-
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:10px 0;">
-        <div style="background:#0a192f; padding:8px; border-radius:8px; display:flex; align-items:center; gap:8px;">
-          <i class="fa-solid fa-temperature-half" style="color:#ffb703; font-size:1rem;"></i>
-          <div>
-            <span style="font-size:0.65rem; color:#94a3b8; display:block;">Clima</span>
-            <span style="font-size:0.8rem; font-weight:700; color:#fff;">${weather.tempC}°C</span>
-          </div>
-        </div>
-        <div style="background:#0a192f; padding:8px; border-radius:8px; display:flex; align-items:center; gap:8px;">
-          <i class="fa-solid fa-wind" style="color:#38bdf8; font-size:1rem;"></i>
-          <div>
-            <span style="font-size:0.65rem; color:#94a3b8; display:block;">Viento</span>
-            <span style="font-size:0.8rem; font-weight:700; color:#fff;">${weather.wind} km/h</span>
-          </div>
-        </div>
-      </div>
-
-      <div style="background:#0a192f; padding:10px; border-radius:8px; font-size:0.75rem; color:#cbd5e1; border:1px solid rgba(255,255,255,0.05); margin-bottom:8px;">
-        <div style="color:#10b981; font-weight:700; font-size:0.68rem; text-transform:uppercase; margin-bottom:3px; display:flex; align-items:center; gap:4px;">
-          <i class="fa-solid fa-couch"></i> Salas VIP & Ubicación
-        </div>
-        <div style="color:#fff; font-weight:600;">${ap.lounges}</div>
-      </div>
-
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
-        <div style="background:#0a192f; padding:8px; border-radius:8px; font-size:0.72rem;">
-          <div style="color:#38bdf8; font-weight:700; font-size:0.65rem; text-transform:uppercase;"><i class="fa-solid fa-wifi"></i> Wi-Fi Oficial</div>
-          <div style="color:#fff; font-weight:600; margin-top:2px;">${ap.wifi}</div>
-        </div>
-        <div style="background:#0a192f; padding:8px; border-radius:8px; font-size:0.72rem;">
-          <div style="color:#f59e0b; font-weight:700; font-size:0.65rem; text-transform:uppercase;"><i class="fa-solid fa-plug"></i> Enchufe Local</div>
-          <div style="color:#fff; font-weight:600; margin-top:2px;">${ap.plugs}</div>
-        </div>
-      </div>
-
-      <div style="background:#0a192f; padding:8px; border-radius:8px; font-size:0.72rem; color:#cbd5e1; margin-bottom:8px;">
-        <div style="color:#a855f7; font-weight:700; font-size:0.65rem; text-transform:uppercase; margin-bottom:2px;"><i class="fa-solid fa-taxi"></i> Transporte & Uber</div>
-        <div>${ap.transport}</div>
-      </div>
-
-      <div style="background:#0a192f; padding:8px; border-radius:8px; font-size:0.72rem; color:#cbd5e1; border:1px solid rgba(255,255,255,0.05);">
-        <div style="color:#94a3b8; font-weight:700; font-size:0.65rem; text-transform:uppercase; margin-bottom:2px;">Wikipedia Resumen</div>
-        <p>${wikiSummary}</p>
-      </div>
-    </div>
-  `;
-}
-
-async function loadDefaultAirportGuide() {
-  const container = document.getElementById('airports-guide-container');
-  if (!container) return;
-  container.innerHTML = `<div style="text-align:center; padding:20px; color:#94a3b8;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando aeropuertos en vivo...</div>`;
-  let html = '';
-  for (let iata of ['SAL', 'EZE', 'MIA']) {
-    html += await generateAirportCardHtml(iata);
-  }
-  container.innerHTML = html;
-}
-
-async function searchAirportGuide() {
-  const input = document.getElementById('airport-search-input')?.value.trim().toUpperCase();
-  if (!input) { loadDefaultAirportGuide(); return; }
-
-  const container = document.getElementById('airports-guide-container');
-  if (!container) return;
-  container.innerHTML = `<div style="text-align:center; padding:20px; color:#94a3b8;"><i class="fa-solid fa-spinner fa-spin"></i> Consultando ${input}...</div>`;
-  const html = await generateAirportCardHtml(input);
-  container.innerHTML = html;
+  return null;
 }
 
 // ESTADÍSTICAS MULTICATEGORÍA
@@ -1615,7 +1035,6 @@ function getFilteredTripsForStats() {
 
 function renderSelectedCategoryStats() {
   const selectedCat = document.getElementById('stats-category-select')?.value || 'trips';
-  
   const pTrips = document.getElementById('stats-panel-trips');
   const pFlights = document.getElementById('stats-panel-flights');
   const pHotels = document.getElementById('stats-panel-hotels');
@@ -1639,7 +1058,6 @@ function renderSelectedCategoryStats() {
 function renderTripCategoryStats() {
   let totalTripDays = 0;
   let totalTripExpenses = 0;
-  let countryCounts = {};
   const activeStatsTrips = getFilteredTripsForStats();
 
   activeStatsTrips.forEach(t => {
@@ -1648,19 +1066,9 @@ function renderTripCategoryStats() {
       const firstTime = items[0].timestamp || 0;
       const lastTime = items[items.length - 1].arrTimestamp || items[items.length - 1].timestamp || firstTime;
       if (lastTime > firstTime) {
-        const diffDays = Math.ceil((lastTime - firstTime) / (1000 * 60 * 60 * 24));
-        totalTripDays += Math.max(1, diffDays);
-      } else {
-        totalTripDays += 1;
-      }
+        totalTripDays += Math.max(1, Math.ceil((lastTime - firstTime) / (1000 * 60 * 60 * 24)));
+      } else { totalTripDays += 1; }
     }
-
-    const titleParts = t.title.split('–').concat(t.title.split(' '));
-    titleParts.forEach(p => {
-      const clean = p.trim();
-      if (clean.length > 3) countryCounts[clean] = (countryCounts[clean] || 0) + 1;
-    });
-
     (t.items || []).forEach(i => {
       if (i.type === 'hotel' && i.hotelCost && i.status === 'Entrada') {
         totalTripExpenses += parseFloat(i.hotelCost) || 0;
@@ -1672,204 +1080,45 @@ function renderTripCategoryStats() {
   const avgDays = totalTripsCount > 0 ? (totalTripDays / totalTripsCount).toFixed(1) : 0;
 
   document.getElementById('trip-stat-days').innerText = totalTripDays;
-  document.getElementById('trip-stat-expenses').innerText = `$${totalTripExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  document.getElementById('trip-stat-expenses').innerText = `$${totalTripExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   document.getElementById('trip-stat-count').innerText = totalTripsCount;
   document.getElementById('trip-stat-avg-days').innerText = `${avgDays} días`;
-
-  const sortedCountries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const countriesUl = document.getElementById('trip-top-countries');
-  if (sortedCountries.length > 0) {
-    countriesUl.innerHTML = sortedCountries.map(([dest, count], idx) => `
-      <li class="top-list-item">
-        <span><b>#${idx + 1}</b> ${dest}</span>
-        <span class="top-list-badge">${count} ${count === 1 ? 'viaje' : 'viajes'}</span>
-      </li>
-    `).join('');
-  } else {
-    countriesUl.innerHTML = `<li class="top-list-item" style="color:#94a3b8;">Sin registros de destinos</li>`;
-  }
 }
 
 function renderHotelCategoryStats() {
   let totalNights = 0;
   let totalCost = 0;
-  let nightsWithCostCount = 0;
-  let hotelBrandCounts = {};
   const activeStatsTrips = getFilteredTripsForStats();
 
   activeStatsTrips.forEach(t => {
     (t.items || []).forEach(i => {
       if (i.type === 'hotel' && i.status === 'Entrada') {
-        let nights = 1;
-        if (i.hotelCheckinTimestamp && i.hotelCheckoutTimestamp) {
-          const diffMs = i.hotelCheckoutTimestamp - i.hotelCheckinTimestamp;
-          nights = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
-        }
-        totalNights += nights;
-
-        const costVal = parseFloat(i.hotelCost) || 0;
-        if (costVal > 0) {
-          totalCost += costVal;
-          nightsWithCostCount += nights;
-        }
-
-        let cleanTitle = i.title ? i.title.replace(/^Check-in:\s*/i, '').trim() : 'Hotel no especificado';
-        hotelBrandCounts[cleanTitle] = (hotelBrandCounts[cleanTitle] || 0) + 1;
+        totalNights += 1;
+        totalCost += parseFloat(i.hotelCost) || 0;
       }
     });
   });
 
-  const avgCostPerNight = nightsWithCostCount > 0 ? (totalCost / nightsWithCostCount).toFixed(2) : '0.00';
-
   document.getElementById('hotel-stat-nights').innerText = totalNights;
-  document.getElementById('hotel-stat-cost').innerText = `$${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  document.getElementById('hotel-stat-avg-night').innerText = `$${avgCostPerNight}`;
-
-  const sortedBrands = Object.entries(hotelBrandCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const brandsUl = document.getElementById('hotel-top-brands');
-  if (sortedBrands.length > 0) {
-    brandsUl.innerHTML = sortedBrands.map(([brand, count], idx) => `
-      <li class="top-list-item">
-        <span><b>#${idx + 1}</b> ${brand}</span>
-        <span class="top-list-badge">${count} ${count === 1 ? 'reserva' : 'reservas'}</span>
-      </li>
-    `).join('');
-  } else {
-    brandsUl.innerHTML = `<li class="top-list-item" style="color:#94a3b8;">Sin hoteles registrados</li>`;
-  }
+  document.getElementById('hotel-stat-cost').innerText = `$${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 }
 
 async function renderFlightStats() {
-  let totalMiles = 0;
-  let milesWithCost = 0;
-  let totalFlightMinutes = 0;
-  let totalFlightsCount = 0;
-  let flightsWithCostCount = 0;
-
   let totalFlightCost = 0;
-  let totalFareCost = 0;
-  let totalTaxesCost = 0;
-
-  let airlineCounts = {};
-  let airlineSpending = {};
-
   const activeStatsTrips = getFilteredTripsForStats();
 
-  for (let t of activeStatsTrips) {
-    for (let i of t.items) {
-      if (i.type === 'flight') {
-        totalFlightsCount++;
-
-        const flightCostVal = parseFloat(i.flightTotalCost) || 0;
-        if (flightCostVal > 0) {
-          flightsWithCostCount++;
-          totalFlightCost += flightCostVal;
-        }
-
-        if (i.flightFareCost) {
-          totalFareCost += parseFloat(i.flightFareCost) || 0;
-        }
-        if (i.flightTaxesCost) {
-          totalTaxesCost += parseFloat(i.flightTaxesCost) || 0;
-        } else if (i.flightTotalCost && i.flightFareCost) {
-          totalTaxesCost += Math.max(0, parseFloat(i.flightTotalCost) - parseFloat(i.flightFareCost));
-        }
-
-        if (i.timestamp && i.arrTimestamp) {
-          const diffMins = Math.max(0, Math.floor((i.arrTimestamp - i.timestamp) / (1000 * 60)));
-          totalFlightMinutes += diffMins;
-        }
-
-        const parts = i.title ? i.title.split('–') : [];
-        if (parts.length === 2) {
-          const origIata = parts[0].trim();
-          const destIata = parts[1].trim();
-          const apOrig = await fetchAirportFromWikidata(origIata);
-          const apDest = await fetchAirportFromWikidata(destIata);
-          if (apOrig && apDest) {
-            const distMiles = Math.round(turf.distance(
-              turf.point([apOrig.lng, apOrig.lat]),
-              turf.point([apDest.lng, apDest.lat]),
-              { units: 'miles' }
-            ));
-            totalMiles += distMiles;
-
-            if (flightCostVal > 0) {
-              milesWithCost += distMiles;
-            }
-          }
-        }
-
-        if (i.subtitle) {
-          const match = i.subtitle.match(/\((.*?)\)/);
-          const airlineName = match ? match[1].trim() : 'Otra';
-          airlineCounts[airlineName] = (airlineCounts[airlineName] || 0) + 1;
-          if (flightCostVal > 0) {
-            airlineSpending[airlineName] = (airlineSpending[airlineName] || 0) + flightCostVal;
-          }
-        }
-      }
-    }
-  }
-
-  const totalFlightHours = (totalFlightMinutes / 60).toFixed(1);
-  const avgCostPerFlight = flightsWithCostCount > 0 ? (totalFlightCost / flightsWithCostCount).toFixed(2) : '0.00';
-  const costPerMile = milesWithCost > 0 ? (totalFlightCost / milesWithCost).toFixed(2) : '0.00';
-
-  document.getElementById('flight-stat-total-cost').innerText = `$${totalFlightCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  document.getElementById('flight-stat-fare-taxes').innerText = `$${totalFareCost.toLocaleString('en-US')} / $${totalTaxesCost.toLocaleString('en-US')}`;
-  document.getElementById('stat-miles').innerText = totalMiles.toLocaleString();
-  document.getElementById('stat-hours').innerText = `${totalFlightHours} h`;
-  document.getElementById('flight-stat-avg-cost').innerText = `$${avgCostPerFlight}`;
-  document.getElementById('flight-stat-cost-per-mile').innerText = `$${costPerMile}/mi`;
-
-  const sortedAirlineSpending = Object.entries(airlineSpending).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  const airlineSpendingUl = document.getElementById('flight-top-airlines-spending');
-  if (sortedAirlineSpending.length > 0) {
-    airlineSpendingUl.innerHTML = sortedAirlineSpending.map(([airline, amount], idx) => `
-      <li class="top-list-item">
-        <span><b>#${idx + 1}</b> ${airline}</span>
-        <span class="top-list-badge" style="background:rgba(16,185,129,0.2); color:#10b981;">$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-      </li>
-    `).join('');
-  } else {
-    airlineSpendingUl.innerHTML = `<li class="top-list-item" style="color:#94a3b8;">Sin costos de aerolíneas registrados</li>`;
-  }
-
-  const labels = Object.keys(airlineCounts);
-  const dataValues = Object.values(airlineCounts);
-  const backgroundColors = ['#0084ff', '#10b981', '#ffb703', '#ec4899', '#8b5cf6'];
-
-  const chartEl = document.getElementById('airlinesChart');
-  if (!chartEl) return;
-  const ctx = chartEl.getContext('2d');
-  if (airlinesChartObj) airlinesChartObj.destroy();
-
-  if (labels.length === 0) {
-    labels.push('Sin vuelos');
-    dataValues.push(1);
-  }
-
-  airlinesChartObj = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: dataValues,
-        backgroundColor: backgroundColors.slice(0, labels.length)
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } }
-      }
-    }
+  activeStatsTrips.forEach(t => {
+    (t.items || []).forEach(i => {
+      if (i.type === 'flight') totalFlightCost += parseFloat(i.flightTotalCost) || 0;
+    });
   });
+
+  document.getElementById('flight-stat-total-cost').innerText = `$${totalFlightCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 }
 
-// CHECKLIST DE EQUIPAJE
+// ==========================================
+// PACKING & MÉTODOS DE PAGO
+// ==========================================
 function renderPackingList() {
   const container = document.getElementById('packing-list-container');
   if (!container) return;
@@ -1878,21 +1127,14 @@ function renderPackingList() {
   const progText = document.getElementById('packing-progress-text');
   if (progText) progText.innerText = `${doneCount} de ${packingItems.length} completados`;
 
-  if (packingItems.length === 0) {
-    container.innerHTML = `<div style="text-align:center; padding:20px; color:#94a3b8; font-size:0.8rem;">La lista está vacía. Añade tus artículos arriba.</div>`;
-    return;
-  }
-
   packingItems.forEach(item => {
     container.innerHTML += `
-      <div class="packing-item-card ${item.done ? 'done' : ''}">
-        <div style="display:flex; align-items:center; gap:10px; flex:1;" onclick="togglePacking(${item.id})">
+      <div class="dark-card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" onclick="togglePacking(${item.id})">
           <i class="fa-solid ${item.done ? 'fa-circle-check text-emerald-400' : 'fa-circle text-slate-600'}"></i>
-          <span style="font-size:0.8rem; color:#fff;">${item.text}</span>
+          <span style="font-size:0.85rem; color:#fff; ${item.done ? 'text-decoration:line-through; opacity:0.6;' : ''}">${item.text}</span>
         </div>
-        <button class="delete-item-btn" onclick="deletePackingItem(event, ${item.id})" title="Eliminar artículo">
-          <i class="fa-solid fa-trash"></i>
-        </button>
+        <button onclick="deletePackingItem(${item.id})" style="background:none; border:none; color:#ef4444; cursor:pointer;"><i class="fa-solid fa-trash"></i></button>
       </div>
     `;
   });
@@ -1904,8 +1146,7 @@ function togglePacking(id) {
   renderPackingList();
 }
 
-function deletePackingItem(event, id) {
-  if (event) event.stopPropagation();
+function deletePackingItem(id) {
   packingItems = packingItems.filter(i => i.id !== id);
   saveDataToStorage();
   renderPackingList();
@@ -1927,40 +1168,18 @@ function addPackingItem(e) {
   input.value = '';
 }
 
-// MÉTODOS DE PAGO
 function renderPaymentMethodsList() {
   const container = document.getElementById('payment-methods-list');
   if (!container) return;
   container.innerHTML = '';
-
-  if (paymentMethods.length === 0) {
-    container.innerHTML = `<div style="text-align:center; padding:12px; color:#94a3b8; font-size:0.75rem;">No tienes métodos de pago guardados.</div>`;
-  } else {
-    paymentMethods.forEach(method => {
-      let icon = 'fa-credit-card';
-      if (method.type === 'Visa') icon = 'fa-cc-visa';
-      else if (method.type === 'MasterCard') icon = 'fa-cc-mastercard';
-      else if (method.type === 'American Express') icon = 'fa-cc-amex';
-      else if (method.type === 'Discover') icon = 'fa-cc-discover';
-      else if (method.type === 'Efectivo') icon = 'fa-money-bill-wave';
-      else if (method.type.includes('Banco') || method.type.includes('Transferencia')) icon = 'fa-building-columns';
-
-      container.innerHTML += `
-        <div class="payment-card-item">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <i class="fa-solid ${icon}" style="font-size:1.2rem; color:#0084ff;"></i>
-            <div>
-              <div style="font-size:0.82rem; font-weight:700; color:#fff;">${method.name}</div>
-              <div style="font-size:0.68rem; color:#94a3b8;">${method.type} ${method.last4 ? '• ••• ' + method.last4 : ''}</div>
-            </div>
-          </div>
-          <button onclick="deletePaymentMethod('${method.id}')" style="background:none; border:none; color:#ef4444; font-size:0.85rem; cursor:pointer; padding:4px;">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
-      `;
-    });
-  }
+  paymentMethods.forEach(method => {
+    container.innerHTML += `
+      <div class="dark-card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div style="font-size:0.85rem; color:#fff;">${method.name} (${method.type})</div>
+        <button onclick="deletePaymentMethod('${method.id}')" style="background:none; border:none; color:#ef4444; cursor:pointer;"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    `;
+  });
   populatePaymentSelectors();
 }
 
@@ -1968,10 +1187,9 @@ function populatePaymentSelectors() {
   const dropdowns = document.querySelectorAll('.payment-selector-dropdown');
   dropdowns.forEach(select => {
     const currentVal = select.value;
-    select.innerHTML = `<option value="">Sin definir / No especificado</option>`;
+    select.innerHTML = `<option value="">Sin definir</option>`;
     paymentMethods.forEach(m => {
-      const label = `${m.name} (${m.type}${m.last4 ? ' • ' + m.last4 : ''})`;
-      select.innerHTML += `<option value="${m.id}">${label}</option>`;
+      select.innerHTML += `<option value="${m.id}">${m.name} (${m.type})</option>`;
     });
     if (currentVal) select.value = currentVal;
   });
@@ -1979,18 +1197,7 @@ function populatePaymentSelectors() {
 
 function openModalAddPaymentMethod() {
   closeModals();
-  document.getElementById('pay-name-input').value = '';
-  document.getElementById('pay-last4-input').value = '';
-  document.getElementById('pay-type-select').value = 'Visa';
-  togglePaymentInputs('Visa');
-  document.getElementById('modal-add-payment').classList.add('active');
-}
-
-function togglePaymentInputs(typeVal) {
-  const last4Group = document.getElementById('group-pay-last4');
-  if (last4Group) {
-    last4Group.style.display = (typeVal === 'Efectivo' || typeVal.includes('Transferencia')) ? 'none' : 'block';
-  }
+  document.getElementById('modal-add-payment')?.classList.add('active');
 }
 
 function saveNewPaymentMethod(e) {
@@ -1999,14 +1206,7 @@ function saveNewPaymentMethod(e) {
   const name = document.getElementById('pay-name-input').value.trim();
   const last4 = document.getElementById('pay-last4-input').value.trim();
 
-  const newMethod = {
-    id: 'pay-' + Date.now(),
-    type: type,
-    name: name,
-    last4: (type === 'Efectivo' || type.includes('Transferencia')) ? '' : last4
-  };
-
-  paymentMethods.push(newMethod);
+  paymentMethods.push({ id: 'pay-' + Date.now(), type, name, last4 });
   saveDataToStorage();
   renderPaymentMethodsList();
   closeModals();
@@ -2019,335 +1219,93 @@ function deletePaymentMethod(id) {
 }
 
 function getPaymentMethodLabel(paymentId) {
-  if (!paymentId) return null;
   const found = paymentMethods.find(m => m.id === paymentId);
-  if (!found) return null;
-  return `${found.name} (${found.type}${found.last4 ? ' • ' + found.last4 : ''})`;
+  return found ? `${found.name} (${found.type})` : null;
 }
 
-// IMPORTACIÓN DE APP IN THE AIR Y FUSIÓN DE VIAJES
-function openModalImportAppInTheAir() {
-  closeModals();
-  document.getElementById('ait-text-input').value = '';
-  document.getElementById('modal-import-ait').classList.add('active');
-}
+// ==========================================
+// IMPORTACIÓN & RESPALDOS (GOOGLE DRIVE & JSON)
+// ==========================================
+function openModalImportAppInTheAir() { closeModals(); document.getElementById('modal-import-ait')?.classList.add('active'); }
+function openModalMergeTrips() { closeModals(); document.getElementById('modal-merge-trips')?.classList.add('active'); }
 
-function handleAitFileUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    document.getElementById('ait-text-input').value = e.target.result;
-  };
-  reader.readAsText(file);
-}
-
-function processAitImportText() {
-  const rawText = document.getElementById('ait-text-input').value;
-  if (!rawText.trim()) {
-    alert("Selecciona un archivo o pega el texto formateado.");
-    return;
-  }
-
-  const parsedTrips = parseAppInTheAirData(rawText);
-  if (parsedTrips.length === 0) {
-    alert("No se identificaron itinerarios válidos.");
-    return;
-  }
-
-  let addedCount = 0;
-  parsedTrips.forEach(newTrip => {
-    trips.unshift(newTrip);
-    addedCount++;
-  });
-
-  saveDataToStorage();
-  renderTrips();
-  closeModals();
-  alert(`✔ Importación completada: ${addedCount} viaje(s) añadidos.`);
-}
-
-function parseAppInTheAirData(raw) {
-  const tripBlocks = raw.split(/Ownership\.MINE;/g).slice(1);
-  const importedTrips = [];
-
-  tripBlocks.forEach((block, idx) => {
-    const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length === 0) return;
-
-    const headerParts = lines[0].split(';');
-    const depTimeIso = headerParts[0] || '';
-    const arrTimeIso = headerParts[1] || '';
-    const orig = headerParts[2] || '';
-    const dest = headerParts[3] || '';
-    let customName = headerParts[6] && headerParts[6] !== 'None' ? headerParts[6] : `${orig} – ${dest}`;
-
-    const items = [];
-    let readingFlights = false;
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.startsWith('flights:')) {
-        readingFlights = true;
-        continue;
-      }
-      if (line.startsWith('hotels:') || line.startsWith('rental cars:') || line.startsWith('expenses:')) {
-        readingFlights = false;
-        continue;
-      }
-
-      if (readingFlights && line.includes(';')) {
-        const fParts = line.split(';');
-        if (fParts.length >= 13) {
-          const airlineCode = fParts[7] || '';
-          const flightNum = fParts[8] || '';
-          const fOrig = fParts[10] || orig;
-          const fDest = fParts[11] || dest;
-          const fDepIso = fParts[12] || depTimeIso;
-          const fArrIso = fParts[13] || arrTimeIso;
-
-          const depDt = fDepIso ? new Date(fDepIso) : new Date();
-          const arrDt = fArrIso ? new Date(fArrIso) : null;
-
-          const dayStr = depDt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
-          const timeStr = depDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-          items.push({
-            id: 'item-ait-' + Date.now() + Math.random().toString(36).substr(2, 4),
-            timestamp: depDt.getTime(),
-            arrTimestamp: arrDt ? arrDt.getTime() : null,
-            dayLabel: dayStr,
-            time: timeStr,
-            tz: 'LOCAL',
-            type: 'flight',
-            title: `${fOrig} – ${fDest}`,
-            status: 'Completado',
-            subtitle: `${airlineCode}${flightNum}`,
-            details: [`Origen: ${fOrig}`, `Destino: ${fDest}`]
-          });
-        }
-      }
-    }
-
-    const startDt = depTimeIso ? new Date(depTimeIso) : new Date();
-    const endDt = arrTimeIso ? new Date(arrTimeIso) : startDt;
-    const datesFormatted = `${startDt.toLocaleDateString('es-ES', { day:'numeric', month:'short', year:'numeric' })} – ${endDt.toLocaleDateString('es-ES', { day:'numeric', month:'short', year:'numeric' })}`;
-
-    importedTrips.push({
-      id: 'trip-ait-' + Date.now() + idx,
-      title: customName,
-      dates: datesFormatted,
-      daysCount: 'Histórico',
-      daysToGo: 'App in the Air',
-      image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=200&q=80',
-      items: items
-    });
-  });
-
-  return importedTrips;
-}
-
-function openModalMergeTrips() {
-  closeModals();
-  const container = document.getElementById('merge-trips-list');
-  if (!container) return;
-  container.innerHTML = '';
-
-  if (trips.length < 2) {
-    container.innerHTML = `<div style="text-align:center; padding:10px; color:#94a3b8;">Necesitas al menos 2 viajes registrados para unirlos.</div>`;
-  } else {
-    trips.forEach(t => {
-      container.innerHTML += `
-        <label class="merge-trip-item">
-          <input type="checkbox" value="${t.id}" class="merge-checkbox">
-          <div style="flex:1;">
-            <div style="font-size:0.85rem; font-weight:700; color:#fff;">${t.title}</div>
-            <div style="font-size:0.72rem; color:#94a3b8;">${t.dates} • ${t.items ? t.items.length : 0} elementos</div>
-          </div>
-        </label>
-      `;
-    });
-  }
-
-  document.getElementById('modal-merge-trips').classList.add('active');
-}
-
-function executeTripMerge() {
-  const selectedBoxes = Array.from(document.querySelectorAll('.merge-checkbox:checked')).map(cb => cb.value);
-  if (selectedBoxes.length < 2) {
-    alert("Selecciona al menos 2 viajes para fusionar.");
-    return;
-  }
-
-  const tripsToMerge = trips.filter(t => selectedBoxes.includes(t.id));
-  const customNameInput = document.getElementById('merged-trip-name').value.trim();
-
-  let mergedItems = [];
-  tripsToMerge.forEach(t => {
-    mergedItems = mergedItems.concat(t.items || []);
-  });
-
-  mergedItems.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
-  const firstItemTime = mergedItems[0]?.timestamp ? new Date(mergedItems[0].timestamp) : new Date();
-  const lastItemTime = mergedItems[mergedItems.length - 1]?.timestamp ? new Date(mergedItems[mergedItems.length - 1].timestamp) : firstItemTime;
-
-  const newTitle = customNameInput || `Viaje Consolidado (${tripsToMerge[0].title.split('–')[0]}...)`;
-  const datesFormatted = `${firstItemTime.toLocaleDateString('es-ES', { day:'numeric', month:'short' })} – ${lastItemTime.toLocaleDateString('es-ES', { day:'numeric', month:'short', year:'numeric' })}`;
-
-  const mergedTrip = {
-    id: 'merged-' + Date.now(),
-    title: newTitle,
-    dates: datesFormatted,
-    daysCount: 'Consolidado',
-    daysToGo: 'Unificado',
-    image: tripsToMerge[0].image || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=200&q=80',
-    items: mergedItems
-  };
-
-  trips = trips.filter(t => !selectedBoxes.includes(t.id));
-  trips.unshift(mergedTrip);
-
-  saveDataToStorage();
-  renderTrips();
-  closeModals();
-  alert(`✔ Viajes unificados en "${newTitle}".`);
-}
-
-// RESPALDOS Y GOOGLE DRIVE
 function connectGoogleDrive() {
-  if (typeof google === 'undefined') {
-    alert('Librería de Google en proceso de carga.');
-    return;
-  }
-
+  if (typeof google === 'undefined') { alert('Librería de Google cargando...'); return; }
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: 'https://www.googleapis.com/auth/drive.file',
-    callback: (response) => {
-      if (response.access_token) {
-        driveAccessToken = response.access_token;
-        const statusEl = document.getElementById('drive-status-text');
-        if (statusEl) statusEl.innerHTML = '🟢 <b style="color:#10b981;">Conectado a Google Drive</b>.';
-        const btn = document.getElementById('btn-connect-drive');
-        if (btn) btn.style.display = 'none';
+    callback: (res) => {
+      if (res.access_token) {
+        driveAccessToken = res.access_token;
+        const st = document.getElementById('drive-status-text');
+        if (st) st.innerHTML = '🟢 <b style="color:#10b981;">Conectado a Google Drive</b>.';
         performManualBackup();
       }
-    },
+    }
   });
-
   tokenClient.requestAccessToken();
 }
 
 function performManualBackup() {
-  if (!driveAccessToken) {
-    connectGoogleDrive();
-    return;
-  }
-
-  const backupData = {
-    app: 'TripMaster Pro',
-    version: '2.2',
-    timestamp: Date.now(),
-    dateStr: new Date().toLocaleString('es-ES'),
-    trips: trips,
-    packingItems: packingItems,
-    paymentMethods: paymentMethods
-  };
-
-  const fileContent = JSON.stringify(backupData, null, 2);
-  const metadata = { name: 'tripmaster_backup.json', mimeType: 'application/json' };
-
+  if (!driveAccessToken) { connectGoogleDrive(); return; }
+  const backupData = { app: 'TripMaster Pro', timestamp: Date.now(), trips, packingItems, paymentMethods, membershipPrograms };
   const formData = new FormData();
-  formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  formData.append('file', new Blob([fileContent], { type: 'application/json' }));
+  formData.append('metadata', new Blob([JSON.stringify({ name: 'tripmaster_backup.json', mimeType: 'application/json' })], { type: 'application/json' }));
+  formData.append('file', new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' }));
 
   fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
     method: 'POST',
     headers: new Headers({ 'Authorization': 'Bearer ' + driveAccessToken }),
     body: formData
-  }).then(res => res.json()).then(data => {
-    const now = Date.now();
-    localStorage.setItem('last_drive_backup_timestamp', now.toString());
+  }).then(res => res.json()).then(() => {
+    localStorage.setItem('last_drive_backup_timestamp', Date.now().toString());
     updateLastBackupDisplay();
     alert('✔ Respaldo guardado en Google Drive.');
-  }).catch(err => {
-    console.error('Error Drive:', err);
-  });
+  }).catch(e => console.error(e));
 }
 
 function performManualRestore() {
-  if (!driveAccessToken) {
-    connectGoogleDrive();
-    return;
-  }
-
+  if (!driveAccessToken) { connectGoogleDrive(); return; }
   fetch("https://www.googleapis.com/drive/v3/files?q=name='tripmaster_backup.json'", {
     headers: { 'Authorization': 'Bearer ' + driveAccessToken }
-  })
-  .then(res => res.json())
-  .then(data => {
+  }).then(r => r.json()).then(data => {
     if (data.files && data.files.length > 0) {
-      const fileId = data.files[0].id;
-      fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      fetch(`https://www.googleapis.com/drive/v3/files/${data.files[0].id}?alt=media`, {
         headers: { 'Authorization': 'Bearer ' + driveAccessToken }
-      })
-      .then(res => res.json())
-      .then(backupData => {
-        if (backupData.trips) {
-          trips = backupData.trips;
-          if (backupData.packingItems) packingItems = backupData.packingItems;
-          if (backupData.paymentMethods) paymentMethods = backupData.paymentMethods;
-          
-          saveDataToStorage();
-          renderTrips();
-          renderPackingList();
-          renderPaymentMethodsList();
-          alert(`✔ Restauración completada: ${trips.length} viaje(s) recuperados.`);
+      }).then(r => r.json()).then(bData => {
+        if (bData.trips) {
+          trips = bData.trips;
+          if (bData.packingItems) packingItems = bData.packingItems;
+          if (bData.paymentMethods) paymentMethods = bData.paymentMethods;
+          if (bData.membershipPrograms) membershipPrograms = bData.membershipPrograms;
+          saveDataToStorage(); renderTrips(); renderPackingList(); renderPaymentMethodsList(); renderMembershipsList();
+          alert(`✔ Restauración exitosa.`);
         }
       });
-    } else {
-      alert('No se encontró el archivo "tripmaster_backup.json" en Google Drive.');
     }
   });
 }
 
 function checkAndPerformAutoBackup() {
   let lastBackup = localStorage.getItem('last_drive_backup_timestamp');
-  let frequency = localStorage.getItem('backup_frequency') || 'weekly';
-
-  if (!lastBackup || !driveAccessToken || frequency === 'off') return;
-
-  const now = Date.now();
-  const ONE_DAY = 24 * 60 * 60 * 1000;
-  let threshold = ONE_DAY * 7;
-
-  if (frequency === 'daily') threshold = ONE_DAY;
-  if (frequency === 'monthly') threshold = ONE_DAY * 30;
-
-  if (now - parseInt(lastBackup) > threshold) performManualBackup();
+  if (lastBackup && driveAccessToken && (Date.now() - parseInt(lastBackup) > 7 * 24 * 60 * 60 * 1000)) performManualBackup();
 }
 
 function updateLastBackupDisplay() {
   const lastBackup = localStorage.getItem('last_drive_backup_timestamp');
-  const freq = localStorage.getItem('backup_frequency') || 'weekly';
-  const select = document.getElementById('backup-frequency');
-  if (select) select.value = freq;
-
-  if (lastBackup) {
+  const lbl = document.getElementById('last-backup-text');
+  if (lbl && lastBackup) {
     const dt = new Date(parseInt(lastBackup));
-    const lbl = document.getElementById('last-backup-text');
-    if (lbl) lbl.innerText = `Último respaldo realizado: ${dt.toLocaleDateString('es-ES')} ${dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
+    lbl.innerText = `Último respaldo: ${dt.toLocaleDateString('es-ES')} ${dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
   }
 }
 
 function exportLocalJson() {
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ trips, packingItems, paymentMethods }, null, 2));
-  const downloadAnchor = document.createElement('a');
-  downloadAnchor.setAttribute("href", dataStr);
-  downloadAnchor.setAttribute("download", `tripmaster_backup_${Date.now()}.json`);
-  downloadAnchor.click();
-  downloadAnchor.remove();
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ trips, packingItems, paymentMethods, membershipPrograms }, null, 2));
+  const a = document.createElement('a');
+  a.setAttribute("href", dataStr);
+  a.setAttribute("download", `tripmaster_backup_${Date.now()}.json`);
+  a.click(); a.remove();
 }
 
 function importLocalJson(e) {
@@ -2357,39 +1315,26 @@ function importLocalJson(e) {
   reader.onload = function(event) {
     try {
       const parsed = JSON.parse(event.target.result);
-      
-      const importedTrips = parsed.trips || parsed.tripsData;
-      const importedPacking = parsed.packingItems || parsed.packing;
-      const importedPayments = parsed.paymentMethods || parsed.payments;
-
-      if (importedTrips && Array.isArray(importedTrips)) {
-        trips = importedTrips;
-        if (importedPacking) packingItems = importedPacking;
-        if (importedPayments) paymentMethods = importedPayments;
-        
-        saveDataToStorage();
-        renderTrips();
-        renderPackingList();
-        renderPaymentMethodsList();
-        alert('✔ Datos restaurados e importados correctamente.');
-      } else {
-        alert('El archivo no contiene la estructura correcta de respaldos.');
+      if (parsed.trips) {
+        trips = parsed.trips;
+        if (parsed.packingItems) packingItems = parsed.packingItems;
+        if (parsed.paymentMethods) paymentMethods = parsed.paymentMethods;
+        if (parsed.membershipPrograms) membershipPrograms = parsed.membershipPrograms;
+        saveDataToStorage(); renderTrips(); renderPackingList(); renderPaymentMethodsList(); renderMembershipsList();
+        alert('✔ Datos importados correctamente.');
       }
-    } catch (err) {
-      console.error('Error al importar:', err);
-      alert('El archivo no es un respaldo válido de TripMaster.');
-    }
+    } catch (err) { alert('Archivo no válido.'); }
   };
   reader.readAsText(file);
 }
 
-// SERVICE WORKERS
+// ==========================================
+// SERVICE WORKERS COMPLETO
+// ==========================================
 let newWorker;
 
 function reloadAppVersion() {
-  if (newWorker) {
-    newWorker.postMessage({ action: 'skipWaiting' });
-  }
+  if (newWorker) newWorker.postMessage({ action: 'skipWaiting' });
   window.location.reload();
 }
 
@@ -2403,11 +1348,7 @@ function checkServiceWorkerUpdates() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then(reg => {
       reg.update();
-
-      if (reg.waiting) {
-        showUpdateToast(reg.waiting);
-      }
-
+      if (reg.waiting) showUpdateToast(reg.waiting);
       reg.addEventListener('updatefound', () => {
         const installingWorker = reg.installing;
         installingWorker.addEventListener('statechange', () => {
@@ -2416,7 +1357,7 @@ function checkServiceWorkerUpdates() {
           }
         });
       });
-    }).catch(err => console.error('Error al registrar Service Worker', err));
+    }).catch(err => console.error('Error Service Worker:', err));
 
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
