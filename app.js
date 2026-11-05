@@ -1,5 +1,5 @@
 // ==========================================
-// TRIPMASTER PRO - ENGINE COMPLETO INTEGRADO
+// TRIPMASTER PRO - MOTOR COMPLETO INTEGRADO
 // ==========================================
 
 let flightMap = null;
@@ -144,15 +144,6 @@ function switchTab(screenId, titleName = '') {
     if (pTitle) pTitle.innerText = titleName;
   }
   showScreen(screenId);
-}
-
-function toggleDropdown(event, menuId) {
-  if (event) event.stopPropagation();
-  const menu = document.getElementById(menuId);
-  if (!menu) return;
-  const isVisible = menu.classList.contains('active');
-  closeModals();
-  if (!isVisible) menu.classList.add('active');
 }
 
 function closeModals() {
@@ -1179,11 +1170,6 @@ function shareActiveTrip() {
   } else {
     alert(`Enlace copiado al portapapeles.`);
   }
-}
-
-function exportCalendar() {
-  closeModals();
-  alert('Sincronización iniciada: El archivo .ics ha sido preparado.');
 }
 
 function handleTripImageUpload(event) {
@@ -2340,11 +2326,6 @@ function checkAndPerformAutoBackup() {
   if (frequency === 'monthly') threshold = ONE_DAY * 30;
 
   if (now - parseInt(lastBackup) > threshold) performManualBackup();
-}
-
-function saveBackupFrequency() {
-  const val = document.getElementById('backup-frequency').value;
-  localStorage.setItem('backup_frequency', val);
 }
 
 function updateLastBackupDisplay() {
