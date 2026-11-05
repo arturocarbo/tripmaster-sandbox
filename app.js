@@ -1,5 +1,5 @@
 // ==========================================
-// TRIPMAST3R PRO - LÓGICA PRINCIPAL Y MODALES
+// TRIPMAST3R PRO - LÓGICA PRINCIPAL (COMPATIBLE CON BACKUPS ANTERIORES)
 // ==========================================
 
 let tripsData = [];
@@ -106,6 +106,7 @@ window.addEventListener('click', (e) => {
   }
 });
 
+// Renderizado de lista con soporte dual para "name" y "title"
 function renderTripsList() {
   const container = document.getElementById('trips-container');
   if (!container) return;
@@ -120,10 +121,17 @@ function renderTripsList() {
   const now = new Date();
 
   const filtered = tripsData.filter(trip => {
-    const matchesSearch = (trip.name || '').toLowerCase().includes(search) || 
-                          (trip.destination || '').toLowerCase().includes(search);
+    const tripName = trip.name || trip.title || '';
+    const tripDest = trip.destination || '';
+    const matchesSearch = tripName.toLowerCase().includes(search) || tripDest.toLowerCase().includes(search);
     
-    const tripYear = trip.startDate ? new Date(trip.startDate).getFullYear().toString() : '';
+    let tripYear = '';
+    if (trip.startDate) {
+      tripYear = new Date(trip.startDate).getFullYear().toString();
+    } else if (trip.dates) {
+      const parts = trip.dates.split('–');
+      if (parts[0]) tripYear = new Date(parts[0].trim()).getFullYear().toString();
+    }
     const matchesYear = (yearVal === 'all' || tripYear === yearVal);
 
     let matchesTime = true;
@@ -134,7 +142,7 @@ function renderTripsList() {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:0.85rem;">No se encontraron viajes en TripMast3r Pro. Toca + para crear uno nuevo.</div>';
+    container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:40px; font-size:0.85rem;">No se encontraron viajes. Toca + para crear uno nuevo.</div>';
     return;
   }
 
@@ -142,11 +150,15 @@ function renderTripsList() {
     const card = document.createElement('div');
     card.className = 'trip-card';
     card.onclick = () => openTripDetail(trip.id);
+
+    const displayName = trip.name || trip.title || 'Viaje Sin Nombre';
+    const displayDates = (trip.startDate && trip.endDate) ? `${trip.startDate} – ${trip.endDate}` : (trip.dates || 'Sin fechas');
+
     card.innerHTML = `
       <img src="${trip.image || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828'}" class="trip-card-img" alt="Portada">
       <div class="trip-card-info">
-        <div class="trip-card-title">${trip.name || 'Viaje Sin Nombre'}</div>
-        <div class="trip-card-dates">${trip.startDate || ''} – ${trip.endDate || ''}</div>
+        <div class="trip-card-title">${displayName}</div>
+        <div class="trip-card-dates">${displayDates}</div>
         <div class="trip-card-badge">${trip.destination || 'Destino'}</div>
       </div>
     `;
@@ -175,8 +187,8 @@ function openTripDetail(tripId) {
   const datesEl = document.getElementById('detail-dates');
   const costEl = document.getElementById('detail-total-cost');
 
-  if (titleEl) titleEl.textContent = trip.name;
-  if (datesEl) datesEl.textContent = `${trip.startDate || ''} – ${trip.endDate || ''}`;
+  if (titleEl) titleEl.textContent = trip.name || trip.title || 'Detalle del Viaje';
+  if (datesEl) datesEl.textContent = (trip.startDate && trip.endDate) ? `${trip.startDate} – ${trip.endDate}` : (trip.dates || '');
 
   let totalCost = 0;
   if (trip.items) {
@@ -198,7 +210,7 @@ function renderTimeline(trip) {
     return;
   }
 
-  const sorted = [...trip.items].sort((a, b) => new Date(a.time) - new Date(b.time));
+  const sorted = [...trip.items].sort((a, b) => new Date(a.time || a.timestamp) - new Date(b.time || b.timestamp));
 
   sorted.forEach(item => {
     const itemEl = document.createElement('div');
@@ -209,10 +221,14 @@ function renderTimeline(trip) {
     let icon = 'fa-plane';
     if (item.type === 'hotel') { iconClass = 'hotel'; icon = 'fa-hotel'; }
     if (item.type === 'car') { iconClass = 'car'; icon = 'fa-car'; }
-    if (item.type === 'restaurant') { iconClass = 'food'; icon = 'fa-utensils'; }
+    if (item.type === 'restaurant' || item.type === 'food') { iconClass = 'food'; icon = 'fa-utensils'; }
     if (item.type === 'activity') { iconClass = 'activity'; icon = 'fa-calendar-check'; }
 
-    const timeStr = item.time ? new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+    let timeStr = '--:--';
+    if (item.time) {
+      const parsedTime = new Date(item.time);
+      timeStr = isNaN(parsedTime.getTime()) ? item.time : parsedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
 
     itemEl.innerHTML = `
       <div class="time-column">${timeStr}</div>
@@ -274,9 +290,11 @@ function saveTripForm(e) {
   const tripObj = {
     id: id,
     name: name,
+    title: name,
     destination: dest,
     startDate: start,
     endDate: end,
+    dates: `${start} – ${end}`,
     image: img || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828',
     items: existingIndex >= 0 ? (tripsData[existingIndex].items || []) : []
   };
@@ -304,7 +322,7 @@ function handleFabClick() {
 }
 
 // ==========================================
-// FORMULARIOS DE ITEMS
+// FORMULARIOS Y MANEJO DE ITINERARIOS
 // ==========================================
 
 function openFlightForm() {
@@ -475,7 +493,7 @@ function openItemDetailsModal(item) {
     bodyEl.innerHTML = `
       <div style="font-size:0.85rem; color:#fff; font-weight:700;">${item.title}</div>
       <div style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">${item.subtitle || ''}</div>
-      <div style="font-size:0.75rem; color:#38bdf8; margin-top:6px;"><i class="fa-solid fa-clock"></i> ${item.time ? new Date(item.time).toLocaleString() : 'Sin hora'}</div>
+      <div style="font-size:0.75rem; color:#38bdf8; margin-top:6px;"><i class="fa-solid fa-clock"></i> ${item.time ? item.time : 'Sin hora'}</div>
       ${item.cost ? `<div style="font-size:0.85rem; color:#10b981; font-weight:800; margin-top:6px;">Costo: $${item.cost}</div>` : ''}
       ${item.paymentMethod ? `<div style="font-size:0.72rem; color:#cbd5e1; margin-top:4px;"><i class="fa-solid fa-credit-card"></i> ${item.paymentMethod}</div>` : ''}
     `;
@@ -533,8 +551,8 @@ function renderAirFlightsList() {
         <div class="air-flight-badge">${fl.airline || 'Vuelo'}</div>
       </div>
       <div style="font-size:0.8rem; color:#fff; font-weight:600;">${fl.title || 'Vuelo'} (${fl.flightNo || 'N/A'})</div>
-      <div style="font-size:0.75rem; color:#94a3b8;">${fl.depTime ? new Date(fl.depTime).toLocaleString() : 'Fecha N/A'}</div>
-      ${fl.totalCost ? `<div style="font-size:0.8rem; color:#10b981; font-weight:700; margin-top:4px;">$${fl.totalCost} USD</div>` : ''}
+      <div style="font-size:0.75rem; color:#94a3b8;">${fl.depTime ? fl.depTime : 'Fecha N/A'}</div>
+      ${fl.totalCost || fl.cost ? `<div style="font-size:0.8rem; color:#10b981; font-weight:700; margin-top:4px;">$${fl.totalCost || fl.cost} USD</div>` : ''}
     </div>
   `).join('');
 }
@@ -604,7 +622,7 @@ function renderPackingList() {
     <div class="packing-item-card ${item.done ? 'done' : ''}" onclick="togglePackingItem(${idx})">
       <div style="display:flex; align-items:center; gap:8px;">
         <i class="fa-regular ${item.done ? 'fa-square-check' : 'fa-square'}" style="color:${item.done ? '#10b981' : '#94a3b8'};"></i>
-        <span style="font-size:0.8rem; color:#fff;">${item.name}</span>
+        <span style="font-size:0.8rem; color:#fff;">${item.name || item.text}</span>
       </div>
       <button onclick="event.stopPropagation(); deletePackingItem(${idx})" class="delete-item-btn">&times;</button>
     </div>
